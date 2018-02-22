@@ -79,6 +79,11 @@ The following IOCTLs are also supported by the device:
   and Switchtec Logic Port ID and Partition number (which is more
   user friendly).
 
+An easy to use CLI and C library is provided to utilize above userspace
+interface to communicate with Microsemi's Switchtec management interface.
+It can be obtained from the switchtec-user_ github repository.
+
+.. _switchtec-user: https://github.com/Microsemi/switchtec-user
 
 Non-Transparent Bridge (NTB) Driver
 ===================================
