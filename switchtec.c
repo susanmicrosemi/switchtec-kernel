@@ -145,6 +145,7 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 	stdev->mrpc_busy = 1;
 	memcpy_toio(&stdev->mmio_mrpc->input_data,
 		    stuser->data, stuser->data_len);
+	wmb();
 	iowrite32(stuser->cmd, &stdev->mmio_mrpc->cmd);
 
 	schedule_delayed_work(&stdev->mrpc_timeout,
@@ -1300,12 +1301,10 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 			      struct pci_dev *pdev)
 {
 	int rc;
+	struct resource *res;
+	void __iomem *map;
 
 	rc = pcim_enable_device(pdev);
-	if (rc)
-		return rc;
-
-	rc = pcim_iomap_regions(pdev, 0x1, KBUILD_MODNAME);
 	if (rc)
 		return rc;
 
@@ -1315,8 +1314,30 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 
 	pci_set_master(pdev);
 
-	stdev->mmio = pcim_iomap_table(pdev)[0];
-	stdev->mmio_mrpc = stdev->mmio + SWITCHTEC_GAS_MRPC_OFFSET;
+	res = devm_request_mem_region(&pdev->dev,
+				      pci_resource_start(pdev, 0),
+				      pci_resource_len(pdev, 0),
+				      KBUILD_MODNAME);
+	if (res == NULL)
+		return -EBUSY;
+
+	stdev->mmio_mrpc = devm_ioremap_wc(&pdev->dev,
+					   pci_resource_start(pdev, 0) +
+					   SWITCHTEC_GAS_MRPC_OFFSET,
+					   SWITCHTEC_GAS_TOP_CFG_OFFSET);
+	if (!stdev->mmio_mrpc)
+		return -ENOMEM;
+
+	map = devm_ioremap(&pdev->dev,
+			   pci_resource_start(pdev, 0) +
+			   SWITCHTEC_GAS_TOP_CFG_OFFSET,
+			   pci_resource_len(pdev, 0) -
+			   SWITCHTEC_GAS_TOP_CFG_OFFSET);
+	if (!map)
+		return -ENOMEM;
+
+	stdev->mmio = map - SWITCHTEC_GAS_TOP_CFG_OFFSET;
+
 	stdev->mmio_sw_event = stdev->mmio + SWITCHTEC_GAS_SW_EVENT_OFFSET;
 	stdev->mmio_sys_info = stdev->mmio + SWITCHTEC_GAS_SYS_INFO_OFFSET;
 	stdev->mmio_flash_info = stdev->mmio + SWITCHTEC_GAS_FLASH_INFO_OFFSET;
