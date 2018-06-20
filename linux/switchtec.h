@@ -34,6 +34,10 @@
 #define SWITCHTEC_EVENT_FATAL    BIT(4)
 
 #define SWITCHTEC_DMA_MRPC_EN	BIT(0)
+enum mrpc_cmd {
+	MRPC_GAS_READ = 0x29,
+};
+
 enum {
 	SWITCHTEC_GAS_MRPC_OFFSET       = 0x0000,
 	SWITCHTEC_GAS_TOP_CFG_OFFSET    = 0x1000,
@@ -418,7 +422,17 @@ struct switchtec_dev {
 
 	struct dma_mrpc_output *dma_mrpc;
 	dma_addr_t dma_mrpc_dma_addr;
+	const struct switchtec_ops *ops;
+	struct work_struct deferred_event_work;
 };
+struct switchtec_ops {
+	u32 (*gas_read8)(struct switchtec_dev *dev, void *addr);
+	u32 (*gas_read16)(struct switchtec_dev *dev, void *addr);
+	u32 (*gas_read32)(struct switchtec_dev *dev, void *addr);
+	u64 (*gas_read64)(struct switchtec_dev *dev, void *addr);
+	void (*memcpy_from_gas)(struct switchtec_dev *dev, void *dst, const void *src, size_t n);
+};
+
 
 static inline struct switchtec_dev *to_stdev(struct device *dev)
 {
