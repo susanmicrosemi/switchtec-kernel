@@ -429,7 +429,7 @@ struct switchtec_ops {
 	u32 (*gas_read8)(struct switchtec_dev *dev, void *addr);
 	u32 (*gas_read16)(struct switchtec_dev *dev, void *addr);
 	u32 (*gas_read32)(struct switchtec_dev *dev, void *addr);
-	u64 (*gas_read64)(struct switchtec_dev *dev, void *addr);
+	//u64 (*gas_read64)(struct switchtec_dev *dev, void *addr);
 	void (*memcpy_from_gas)(struct switchtec_dev *dev, void *dst, const void *src, size_t n);
 };
 
