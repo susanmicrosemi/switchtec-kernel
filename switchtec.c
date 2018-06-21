@@ -1470,16 +1470,19 @@ static void init_pff(struct switchtec_dev *stdev)
 
 	stdev->pff_csr_count = i;
 
-	reg = stdev->ops->gas_read32(stdev,&pcfg->usp_pff_inst_id);
+	//reg = stdev->ops->gas_read32(stdev,&pcfg->usp_pff_inst_id);
+	reg = ioread32(&pcfg->usp_pff_inst_id);
 	if (reg < SWITCHTEC_MAX_PFF_CSR)
 		stdev->pff_local[reg] = 1;
 
-	reg = stdev->ops->gas_read32(stdev,&pcfg->vep_pff_inst_id);
+	//reg = stdev->ops->gas_read32(stdev,&pcfg->vep_pff_inst_id);
+	reg = ioread32(&pcfg->vep_pff_inst_id);
 	if (reg < SWITCHTEC_MAX_PFF_CSR)
 		stdev->pff_local[reg] = 1;
 
 	for (i = 0; i < ARRAY_SIZE(pcfg->dsp_pff_inst_id); i++) {
-		reg = stdev->ops->gas_read32(stdev,&pcfg->dsp_pff_inst_id[i]);
+		//reg = stdev->ops->gas_read32(stdev,&pcfg->dsp_pff_inst_id[i]);
+		reg = ioread32(&pcfg->dsp_pff_inst_id[i]);
 		if (reg < SWITCHTEC_MAX_PFF_CSR)
 			stdev->pff_local[reg] = 1;
 	}
@@ -1545,36 +1548,41 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 	struct switchtec_dev *stdev;
 	int rc;
 
-	if (pdev->class == MICROSEMI_NTB_CLASSCODE)
-		request_module_nowait("ntb_hw_switchtec");
+	//if (pdev->class == MICROSEMI_NTB_CLASSCODE)
+	//	request_module_nowait("ntb_hw_switchtec");
 
 	stdev = stdev_create(pdev);
+	dev_dbg(&stdev->dev, "%s:  0 \n", __func__);
 	if (IS_ERR(stdev))
 		return PTR_ERR(stdev);
 
+	dev_dbg(&stdev->dev, "%s:  1 \n", __func__);
 	rc = switchtec_init_pci(stdev, pdev);
 	if (rc)
 		goto err_put;
 
+	dev_dbg(&stdev->dev, "%s:  2 \n", __func__);
 	rc = switchtec_init_isr(stdev);
 	if (rc) {
 		dev_err(&stdev->dev, "failed to init isr.\n");
 		goto err_put;
 	}
 
+	dev_dbg(&stdev->dev, "%s:  3 \n", __func__);
 	iowrite32(SWITCHTEC_EVENT_CLEAR |
 		  SWITCHTEC_EVENT_EN_IRQ,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
 	enable_link_state_events(stdev);
 
+	dev_dbg(&stdev->dev, "%s:  4 \n", __func__);
 	dev_dbg(&stdev->dev, "%s:  init ops normal+++\n", __func__);
-	//stdev->ops = &normal_ops;
+	stdev->ops = &normal_ops;
 	dev_dbg(&stdev->dev, "%s:  init ops normal___\n", __func__);
 
 	if (stdev->dma_mrpc){
 		enable_dma_mrpc(stdev);
 		dev_dbg(&stdev->dev, "%s:  init ops dma\n", __func__);
-		//stdev->ops = &mrpc_dma_ops;
+		stdev->ops = &mrpc_dma_ops;
 		dev_dbg(&stdev->dev, "%s:  init ops dma\n", __func__);
 	}
 
