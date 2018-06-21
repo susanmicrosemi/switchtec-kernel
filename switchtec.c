@@ -273,9 +273,13 @@ static void gas_read(struct switchtec_dev *stdev, void *offset, char *data, size
 {	
 	struct switchtec_user *stuser;
 	char outbuf[64];
-	dev_dbg(&stdev->dev, "%s: \n", __func__);
-	memcpy(outbuf, &offset, sizeof(offset));
-	memcpy(outbuf+sizeof(offset), &n, sizeof(n));
+	u32 addr = offset - stdev->mmio;
+	dev_dbg(&stdev->dev, "%s: offset = %p, size = %zu\n", __func__, offset, n);
+	dev_dbg(&stdev->dev, "%s: *offset = %x, size = %zu\n", __func__, *(u32 *)offset, n);
+	dev_dbg(&stdev->dev, "%s: addr = %x, size = %zu\n", __func__, addr, n);
+	memcpy(outbuf, &addr, sizeof(addr));
+	memcpy(outbuf+sizeof(addr), &n, sizeof(n));
+	dev_dbg(&stdev->dev, "%s: outbuf = %x, outbuf = %x, size = %zu\n", __func__, *(u32 *)outbuf, *(u32 *)(outbuf+4), n);
 
 	stuser = switchtec_dev_open_kernel(stdev);
 	switchtec_dev_write_kernel(stuser, outbuf, 8);
@@ -425,6 +429,7 @@ static ssize_t device_version_show(struct device *dev,
 	struct switchtec_dev *stdev = to_stdev(dev);
 	u32 ver;
 
+	dev_dbg(&stdev->dev, "%s\n", __func__);
 	ver = stdev->ops->gas_read32(stdev,&stdev->mmio_sys_info->device_version);
 
 	return sprintf(buf, "%x\n", ver);
@@ -1549,6 +1554,7 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 {
 	struct switchtec_dev *stdev;
 	int rc;
+	u32 ver;
 
 	//if (pdev->class == MICROSEMI_NTB_CLASSCODE)
 	//	request_module_nowait("ntb_hw_switchtec");
@@ -1586,6 +1592,8 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 		dev_dbg(&stdev->dev, "%s:  init ops dma\n", __func__);
 		stdev->ops = &mrpc_dma_ops;
 		dev_dbg(&stdev->dev, "%s:  init ops dma\n", __func__);
+		ver = stdev->ops->gas_read32(stdev,&stdev->mmio_sys_info->device_id);
+		dev_dbg(&stdev->dev, "ver %x:  init ops dma\n", ver);
 	}
 
 	rc = cdev_device_add(&stdev->cdev, &stdev->dev);
