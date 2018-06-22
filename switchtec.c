@@ -186,9 +186,9 @@ static struct switchtec_user *switchtec_dev_open_kernel(struct switchtec_dev *st
 {
 	struct switchtec_user *stuser;
 
+	dev_dbg(&stdev->dev, "%s: \n", __func__);
 	stuser = stuser_create(stdev);
 
-	dev_dbg(&stdev->dev, "%s: %p\n", __func__, stuser);
 
 	return stuser;
 }
@@ -197,6 +197,7 @@ static ssize_t switchtec_dev_write_kernel(struct switchtec_user * stuser, const 
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
+	dev_dbg(&stdev->dev, "%s: %p\n", __func__, stuser);
 	stuser->data_len = size;
 
 	rc = lock_mutex_and_test_alive(stdev);
@@ -227,6 +228,7 @@ static ssize_t switchtec_dev_read_kernel(struct switchtec_user *stuser, char  *d
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
+	dev_dbg(&stdev->dev, "%s: %p\n", __func__, stuser);
 	rc = lock_mutex_and_test_alive(stdev);
 	if (rc)
 		return rc;
