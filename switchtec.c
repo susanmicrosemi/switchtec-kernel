@@ -69,7 +69,7 @@ struct switchtec_user {
 	int event_cnt;
 };
 
-static void _memcpy_fromio(struct switchtec_dev *dev, void *buffer, const void *addr, size_t size)
+static void _memcpy_fromio(struct switchtec_dev *dev, void *buffer, void *addr, size_t size)
 {
 	memcpy_fromio(buffer, addr, size);
 }
@@ -96,14 +96,20 @@ static const struct switchtec_ops normal_ops = {
 
 static int lock_mutex_and_test_alive(struct switchtec_dev *stdev)
 {
-	if (mutex_lock_interruptible(&stdev->mrpc_mutex))
+	dev_dbg(&stdev->dev, " 0 %s: stdev %p, %p\n", __func__, stdev, &stdev->syscall_mutex);
+	//if (mutex_lock_interruptible(&stdev->mrpc_mutex))
+	if (mutex_lock_interruptible(&stdev->syscall_mutex))
 		return -EINTR;
 
+	dev_dbg(&stdev->dev, " 1 %s: stdev %p, %p\n", __func__, stdev, &stdev->syscall_mutex);
 	if (!stdev->alive) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
+		mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 		return -ENODEV;
 	}
 
+	dev_dbg(&stdev->dev, "2 %s: stdev %p, %p\n", __func__, stdev, &stdev->syscall_mutex);
 	return 0;
 }
 static void stuser_set_state(struct switchtec_user *stuser,
@@ -184,42 +190,51 @@ static int mrpc_queue_cmd(struct switchtec_user *stuser)
 }
 static struct switchtec_user *switchtec_dev_open_kernel(struct switchtec_dev *stdev)
 {
-	struct switchtec_user *stuser;
 
 	dev_dbg(&stdev->dev, "%s: \n", __func__);
-	stuser = stuser_create(stdev);
+	stdev->kernel_stuser = stuser_create(stdev);
 
 
-	return stuser;
+	return stdev->kernel_stuser;
 }
 static ssize_t switchtec_dev_write_kernel(struct switchtec_user * stuser, const char *data, size_t size)
 {
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
-	dev_dbg(&stdev->dev, "%s: %p\n", __func__, stuser);
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	stuser->data_len = size;
 
-	rc = lock_mutex_and_test_alive(stdev);
-	if (rc)
-		return rc;
-
+	//rc = lock_mutex_and_test_alive(stdev);
+	//if (rc)
+	//	return rc;
+dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
+	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
+	
+	dev_dbg(&stdev->dev, "1 %s: %p\n", __func__, stuser);
 	if (stuser->state != MRPC_IDLE) {
 		rc = -EBADE;
 		goto out;
 	}
 
+	dev_dbg(&stdev->dev, "2 %s: %p\n", __func__, stuser);
 	stuser->cmd = MRPC_GAS_READ;
 	memcpy(&stuser->data, data, size);
 
 	rc = mrpc_queue_cmd(stuser);
 
+	dev_dbg(&stdev->dev, "3 %s: %p\n", __func__, stuser);
 out:
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 
+	dev_dbg(&stdev->dev, "4 %s: %p\n", __func__, stuser);
 	if (rc)
 		return rc;
 
+	dev_dbg(&stdev->dev, "5 %s: %p\n", __func__, stuser);
 	return size;
 }
 static ssize_t switchtec_dev_read_kernel(struct switchtec_user *stuser, char  *data,
@@ -228,40 +243,62 @@ static ssize_t switchtec_dev_read_kernel(struct switchtec_user *stuser, char  *d
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
-	dev_dbg(&stdev->dev, "%s: %p\n", __func__, stuser);
-	rc = lock_mutex_and_test_alive(stdev);
-	if (rc)
-		return rc;
-
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
+	//rc = lock_mutex_and_test_alive(stdev);
+	//if (rc)
+	//	return rc;
+dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
+	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
+	
+	dev_dbg(&stdev->dev, "1 %s: %p\n", __func__, stuser);
 	if (stuser->state == MRPC_IDLE) {
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
 		mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 		return -EBADE;
 	}
 
+	dev_dbg(&stdev->dev, "2 %s: %p\n", __func__, stuser);
 	stuser->read_len = size;
 
+		dev_dbg(&stdev->dev, "mutex unlock 2 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 3 %s\n", __func__);
 
+	dev_dbg(&stdev->dev, "3 %s: %p\n", __func__, stuser);
 	rc = wait_for_completion_interruptible(&stuser->comp);
 	if (rc < 0)
 		return rc;
 
-	rc = lock_mutex_and_test_alive(stdev);
-	if (rc)
-		return rc;
-
+	dev_dbg(&stdev->dev, "4 %s: %p\n", __func__, stuser);
+	//rc = lock_mutex_and_test_alive(stdev);
+	//if (rc)
+	//	return rc;
+dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
+	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
+	
+	dev_dbg(&stdev->dev, "5 %s: %p\n", __func__, stuser);
 	if (stuser->state != MRPC_DONE) {
+		dev_dbg(&stdev->dev, "mutex unlock 4 %s\n", __func__);
 		mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 5 %s\n", __func__);
 		return -EBADE;
 	}
 
+	dev_dbg(&stdev->dev, "6 %s: %p\n", __func__, stuser);
 	memcpy(data, &stuser->data,
 			  size);
 
 	stuser_set_state(stuser, MRPC_IDLE);
 
+	dev_dbg(&stdev->dev, "7 %s: %p\n", __func__, stuser);
+		dev_dbg(&stdev->dev, "mutex unlock 6 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 7 %s\n", __func__);
 
+	dev_dbg(&stdev->dev, "8 %s: %p\n", __func__, stuser);
 	if (stuser->status == SWITCHTEC_MRPC_STATUS_DONE)
 		return size;
 	else if (stuser->status == SWITCHTEC_MRPC_STATUS_INTERRUPTED)
@@ -281,7 +318,8 @@ static void gas_read(struct switchtec_dev *stdev, void *offset, char *data, size
 	memcpy(outbuf+sizeof(addr), &n, sizeof(n));
 	dev_dbg(&stdev->dev, "%s: outbuf = %x, outbuf = %x, size = %zu\n", __func__, *(u32 *)outbuf, *(u32 *)(outbuf+4), n);
 
-	stuser = switchtec_dev_open_kernel(stdev);
+	//stuser = switchtec_dev_open_kernel(stdev);
+	stuser = stdev->kernel_stuser;
 	switchtec_dev_write_kernel(stuser, outbuf, 8);
 
 	switchtec_dev_read_kernel(stuser, outbuf, n);
@@ -301,13 +339,21 @@ create_gas_rd(u32, 8);
 create_gas_rd(u32, 16);
 create_gas_rd(u32, 32);
 //create_gas_rd(u64, 64);
+
+static void _memcpy_from_gas(struct switchtec_dev *stdev, void *buffer, void *addr, size_t size)
+{
+	gas_read(stdev, addr, buffer, size);
+}
+
+
 static const struct switchtec_ops mrpc_dma_ops = {
 	.gas_read8 =  gas_rd8,
 	.gas_read16 = gas_rd16,
 	.gas_read32 = gas_rd32,
 	//.gas_read64 = gas_rd64,
-	.memcpy_from_gas = _memcpy_fromio,
+	.memcpy_from_gas = _memcpy_from_gas,
 };
+
 static void stuser_free(struct kref *kref)
 {
 	struct switchtec_user *stuser;
@@ -347,7 +393,7 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	if (stdev->dma_mrpc)
 		stuser->status = stdev->dma_mrpc->status;
 	else{
-		stuser->status = ioread32(&stdev->mmio_mrpc->status);
+		stuser->status = stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->status);
 		dev_dbg(&stdev->dev, "%s\n", __func__);
 	}
 	if (stuser->status == SWITCHTEC_MRPC_STATUS_INPROGRESS)
@@ -362,7 +408,7 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	if (stdev->dma_mrpc)
 		stuser->return_code = stdev->dma_mrpc->rtn_code;
 	else
-		stuser->return_code = ioread32(&stdev->mmio_mrpc->ret_value);
+		stuser->return_code = stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->ret_value);
 	if (stuser->return_code != 0)
 		goto out;
 
@@ -370,7 +416,7 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 		memcpy(stuser->data, &stdev->dma_mrpc->data,
 			      stuser->read_len);
 	else
-		memcpy_fromio(stuser->data, &stdev->mmio_mrpc->output_data,
+		stdev->ops->memcpy_from_gas(stdev,stuser->data, &stdev->mmio_mrpc->output_data,
 			      stuser->read_len);
 out:
 	complete_all(&stuser->comp);
@@ -389,10 +435,14 @@ static void mrpc_event_work(struct work_struct *work)
 
 	dev_dbg(&stdev->dev, "%s\n", __func__);
 
+	dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
 	cancel_delayed_work(&stdev->mrpc_timeout);
 	mrpc_complete_cmd(stdev);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 }
 
 
@@ -406,12 +456,14 @@ static void mrpc_timeout_work(struct work_struct *work)
 
 	dev_dbg(&stdev->dev, "%s\n", __func__);
 
+	dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
 
 	if (stdev->dma_mrpc)
 		status = stdev->dma_mrpc->status;
 	else
-		status = ioread32(&stdev->mmio_mrpc->status);
+		status = stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->status);
 	if (status == SWITCHTEC_MRPC_STATUS_INPROGRESS) {
 		schedule_delayed_work(&stdev->mrpc_timeout,
 				      msecs_to_jiffies(500));
@@ -420,7 +472,9 @@ static void mrpc_timeout_work(struct work_struct *work)
 
 	mrpc_complete_cmd(stdev);
 out:
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 }
 
 static ssize_t device_version_show(struct device *dev,
@@ -448,11 +502,11 @@ static ssize_t fw_version_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(fw_version);
 
-static ssize_t io_string_show(char *buf, void __iomem *attr, size_t len)
+static ssize_t io_string_show(struct switchtec_dev *stdev, char *buf, void __iomem *attr, size_t len)
 {
 	int i;
 
-	memcpy_fromio(buf, attr, len);
+	stdev->ops->memcpy_from_gas(stdev, buf, attr, len);
 	buf[len] = '\n';
 	buf[len + 1] = 0;
 
@@ -471,7 +525,7 @@ static ssize_t field ## _show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
 { \
 	struct switchtec_dev *stdev = to_stdev(dev); \
-	return io_string_show(buf, &stdev->mmio_sys_info->field, \
+	return io_string_show(stdev, buf, &stdev->mmio_sys_info->field, \
 			    sizeof(stdev->mmio_sys_info->field)); \
 } \
 \
@@ -486,7 +540,7 @@ static ssize_t component_id_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
-	int id = ioread16(&stdev->mmio_sys_info->component_id);
+	int id = stdev->ops->gas_read16(stdev,&stdev->mmio_sys_info->component_id);
 
 	return sprintf(buf, "PM%04X\n", id);
 }
@@ -496,7 +550,7 @@ static ssize_t component_revision_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
-	int rev = ioread8(&stdev->mmio_sys_info->component_revision);
+	int rev = stdev->ops->gas_read8(stdev,&stdev->mmio_sys_info->component_revision);
 
 	return sprintf(buf, "%d\n", rev);
 }
@@ -544,6 +598,7 @@ static int switchtec_dev_open(struct inode *inode, struct file *filp)
 	stdev = container_of(inode->i_cdev, struct switchtec_dev, cdev);
 
 	stuser = stuser_create(stdev);
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	if (IS_ERR(stuser))
 		return PTR_ERR(stuser);
 
@@ -561,6 +616,7 @@ static int switchtec_dev_release(struct inode *inode, struct file *filp)
 {
 	struct switchtec_user *stuser = filp->private_data;
 
+	dev_dbg(&stuser->stdev->dev, "* %s: \n", __func__);
 	stuser_put(stuser);
 
 	return 0;
@@ -575,6 +631,7 @@ static ssize_t switchtec_dev_write(struct file *filp, const char __user *data,
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	if (size < sizeof(stuser->cmd) ||
 	    size > sizeof(stuser->cmd) + sizeof(stuser->data))
 		return -EINVAL;
@@ -606,7 +663,9 @@ static ssize_t switchtec_dev_write(struct file *filp, const char __user *data,
 	rc = mrpc_queue_cmd(stuser);
 
 out:
-	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
+	mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 
 	if (rc)
 		return rc;
@@ -623,6 +682,7 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
 
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	if (size < sizeof(stuser->cmd) ||
 	    size > sizeof(stuser->cmd) + sizeof(stuser->data))
 		return -EINVAL;
@@ -632,13 +692,17 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 		return rc;
 
 	if (stuser->state == MRPC_IDLE) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
+		mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 		return -EBADE;
 	}
 
 	stuser->read_len = size - sizeof(stuser->return_code);
 
-	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 2 %s\n", __func__);
+	mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 3 %s\n", __func__);
 
 	if (filp->f_flags & O_NONBLOCK) {
 		if (!try_wait_for_completion(&stuser->comp))
@@ -654,7 +718,9 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 		return rc;
 
 	if (stuser->state != MRPC_DONE) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 4 %s\n", __func__);
+		mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 5 %s\n", __func__);
 		return -EBADE;
 	}
 
@@ -674,10 +740,14 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 	}
 
 	stuser_set_state(stuser, MRPC_IDLE);
+	dev_dbg(&stdev->dev, "mrpc idle, ---> %s: %p\n", __func__, stuser);
 
 out:
-	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 6 %s\n", __func__);
+	mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 7 %s\n", __func__);
 
+	dev_dbg(&stdev->dev, "mrpc idle1 ---> %s: %p\n", __func__, stuser);
 	if (stuser->status == SWITCHTEC_MRPC_STATUS_DONE)
 		return size;
 	else if (stuser->status == SWITCHTEC_MRPC_STATUS_INTERRUPTED)
@@ -694,13 +764,16 @@ static unsigned int switchtec_dev_poll(struct file *filp, poll_table *wait)
 	struct switchtec_dev *stdev = stuser->stdev;
 	int ret = 0;
 
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	poll_wait(filp, &stuser->comp.wait, wait);
 	poll_wait(filp, &stdev->event_wq, wait);
 
 	if (lock_mutex_and_test_alive(stdev))
 		return POLLIN | POLLRDHUP | POLLOUT | POLLERR | POLLHUP;
 
-	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
+	mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 
 	if (try_wait_for_completion(&stuser->comp))
 		ret |= POLLIN | POLLRDNORM;
@@ -726,13 +799,13 @@ static int ioctl_flash_info(struct switchtec_dev *stdev,
 	return 0;
 }
 
-static void set_fw_info_part(struct switchtec_ioctl_flash_part_info *info,
+static void set_fw_info_part(struct switchtec_dev *stdev, struct switchtec_ioctl_flash_part_info *info,
 			     struct partition_info __iomem *pi)
 {
-	info->address = ioread32(&pi->address);
+	info->address = stdev->ops->gas_read32(stdev,&pi->address);
 	//info->address = stdev->ops->gas_read32(stdev,&pi->address);
 	//info->length = stdev->ops->gas_read32(stdev,&pi->length);
-	info->length = ioread32(&pi->length);
+	info->length = stdev->ops->gas_read32(stdev,&pi->length);
 }
 
 static int ioctl_flash_part_info(struct switchtec_dev *stdev,
@@ -749,54 +822,54 @@ static int ioctl_flash_part_info(struct switchtec_dev *stdev,
 	switch (info.flash_partition) {
 	case SWITCHTEC_IOCTL_PART_CFG0:
 		active_addr = stdev->ops->gas_read32(stdev,&fi->active_cfg);
-		set_fw_info_part(&info, &fi->cfg0);
-		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG0_RUNNING)
+		set_fw_info_part(stdev, &info, &fi->cfg0);
+		if (stdev->ops->gas_read16(stdev,&si->cfg_running) == SWITCHTEC_CFG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_CFG1:
 		active_addr = stdev->ops->gas_read32(stdev,&fi->active_cfg);
-		set_fw_info_part(&info, &fi->cfg1);
-		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG1_RUNNING)
+		set_fw_info_part(stdev, &info, &fi->cfg1);
+		if (stdev->ops->gas_read16(stdev,&si->cfg_running) == SWITCHTEC_CFG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG0:
 		active_addr = stdev->ops->gas_read32(stdev,&fi->active_img);
-		set_fw_info_part(&info, &fi->img0);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG0_RUNNING)
+		set_fw_info_part(stdev, &info, &fi->img0);
+		if (stdev->ops->gas_read16(stdev,&si->img_running) == SWITCHTEC_IMG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG1:
 		active_addr = stdev->ops->gas_read32(stdev,&fi->active_img);
-		set_fw_info_part(&info, &fi->img1);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG1_RUNNING)
+		set_fw_info_part(stdev, &info, &fi->img1);
+		if (stdev->ops->gas_read16(stdev,&si->img_running) == SWITCHTEC_IMG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_NVLOG:
-		set_fw_info_part(&info, &fi->nvlog);
+		set_fw_info_part(stdev, &info, &fi->nvlog);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR0:
-		set_fw_info_part(&info, &fi->vendor[0]);
+		set_fw_info_part(stdev, &info, &fi->vendor[0]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR1:
-		set_fw_info_part(&info, &fi->vendor[1]);
+		set_fw_info_part(stdev, &info, &fi->vendor[1]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR2:
-		set_fw_info_part(&info, &fi->vendor[2]);
+		set_fw_info_part(stdev, &info, &fi->vendor[2]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR3:
-		set_fw_info_part(&info, &fi->vendor[3]);
+		set_fw_info_part(stdev, &info, &fi->vendor[3]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR4:
-		set_fw_info_part(&info, &fi->vendor[4]);
+		set_fw_info_part(stdev, &info, &fi->vendor[4]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR5:
-		set_fw_info_part(&info, &fi->vendor[5]);
+		set_fw_info_part(stdev, &info, &fi->vendor[5]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR6:
-		set_fw_info_part(&info, &fi->vendor[6]);
+		set_fw_info_part(stdev, &info, &fi->vendor[6]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR7:
-		set_fw_info_part(&info, &fi->vendor[7]);
+		set_fw_info_part(stdev, &info, &fi->vendor[7]);
 		break;
 	default:
 		return -EINVAL;
@@ -830,7 +903,7 @@ static int ioctl_event_summary(struct switchtec_dev *stdev,
 	}
 
 	for (i = 0; i < SWITCHTEC_MAX_PFF_CSR; i++) {
-		reg = ioread16(&stdev->mmio_pff_csr[i].vendor_id);
+		reg = stdev->ops->gas_read16(stdev, &stdev->mmio_pff_csr[i].vendor_id);
 		if (reg != MICROSEMI_VENDOR_ID)
 			break;
 
@@ -1117,6 +1190,7 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 	int rc;
 	void __user *argp = (void __user *)arg;
 
+	dev_dbg(&stdev->dev, "* %s: %p\n", __func__, stuser);
 	rc = lock_mutex_and_test_alive(stdev);
 	if (rc)
 		return rc;
@@ -1145,7 +1219,9 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	}
 
-	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
+	mutex_unlock(&stdev->syscall_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 	return rc;
 }
 
@@ -1253,7 +1329,9 @@ static void stdev_kill(struct switchtec_dev *stdev)
 	cancel_delayed_work_sync(&stdev->mrpc_timeout);
 
 	/* Mark the hardware as unavailable and complete all completions */
+	dev_dbg(&stdev->dev, "mutex lock 0 %s\n", __func__);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "mutex lock 1 %s\n", __func__);
 	stdev->alive = false;
 
 	/* Wake up and kill any users waiting on an MRPC request */
@@ -1263,7 +1341,9 @@ static void stdev_kill(struct switchtec_dev *stdev)
 		stuser_put(stuser);
 	}
 
+		dev_dbg(&stdev->dev, "mutex unlock 0 %s\n", __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+		dev_dbg(&stdev->dev, "mutex unlock 1 %s\n", __func__);
 
 	/* Wake up any users waiting on event_wq */
 	wake_up_interruptible(&stdev->event_wq);
@@ -1284,8 +1364,10 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 
 	stdev->alive = true;
 	stdev->pdev = pdev;
+	stdev->ops = &normal_ops;
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
+	mutex_init(&stdev->syscall_mutex);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_WORK(&stdev->deferred_event_work, event_deferred_work);
@@ -1430,7 +1512,7 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 	if (nvecs < 0)
 		return nvecs;
 
-	event_irq = ioread32(&stdev->mmio_part_cfg->vep_vector_number);
+	event_irq = stdev->ops->gas_read32(stdev,&stdev->mmio_part_cfg->vep_vector_number);
 	if (event_irq < 0 || event_irq >= nvecs)
 		return -EFAULT;
 
@@ -1448,7 +1530,7 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 	if (!stdev->dma_mrpc)
 		return rc;
 
-	dma_mrpc_irq = ioread32(&stdev->mmio_mrpc->dma_vector);
+	dma_mrpc_irq = stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->dma_vector);
 	if ( dma_mrpc_irq < 0 || dma_mrpc_irq >= nvecs)
 		return -EFAULT;
 
@@ -1470,7 +1552,7 @@ static void init_pff(struct switchtec_dev *stdev)
 	struct part_cfg_regs *pcfg = stdev->mmio_part_cfg;
 
 	for (i = 0; i < SWITCHTEC_MAX_PFF_CSR; i++) {
-		reg = ioread16(&stdev->mmio_pff_csr[i].vendor_id);
+		reg = stdev->ops->gas_read16(stdev, &stdev->mmio_pff_csr[i].vendor_id);
 		if (reg != MICROSEMI_VENDOR_ID)
 			break;
 	}
@@ -1478,18 +1560,18 @@ static void init_pff(struct switchtec_dev *stdev)
 	stdev->pff_csr_count = i;
 
 	//reg = stdev->ops->gas_read32(stdev,&pcfg->usp_pff_inst_id);
-	reg = ioread32(&pcfg->usp_pff_inst_id);
+	reg = stdev->ops->gas_read32(stdev, &pcfg->usp_pff_inst_id);
 	if (reg < SWITCHTEC_MAX_PFF_CSR)
 		stdev->pff_local[reg] = 1;
 
 	//reg = stdev->ops->gas_read32(stdev,&pcfg->vep_pff_inst_id);
-	reg = ioread32(&pcfg->vep_pff_inst_id);
+	reg = stdev->ops->gas_read32(stdev, &pcfg->vep_pff_inst_id);
 	if (reg < SWITCHTEC_MAX_PFF_CSR)
 		stdev->pff_local[reg] = 1;
 
 	for (i = 0; i < ARRAY_SIZE(pcfg->dsp_pff_inst_id); i++) {
 		//reg = stdev->ops->gas_read32(stdev,&pcfg->dsp_pff_inst_id[i]);
-		reg = ioread32(&pcfg->dsp_pff_inst_id[i]);
+		reg = stdev->ops->gas_read32(stdev, &pcfg->dsp_pff_inst_id[i]);
 		if (reg < SWITCHTEC_MAX_PFF_CSR)
 			stdev->pff_local[reg] = 1;
 	}
@@ -1520,8 +1602,8 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	stdev->mmio_sys_info = stdev->mmio + SWITCHTEC_GAS_SYS_INFO_OFFSET;
 	stdev->mmio_flash_info = stdev->mmio + SWITCHTEC_GAS_FLASH_INFO_OFFSET;
 	stdev->mmio_ntb = stdev->mmio + SWITCHTEC_GAS_NTB_OFFSET;
-	stdev->partition = ioread8(&stdev->mmio_sys_info->partition_id);
-	stdev->partition_count = ioread8(&stdev->mmio_ntb->partition_count);
+	stdev->partition = stdev->ops->gas_read8(stdev, &stdev->mmio_sys_info->partition_id);
+	stdev->partition_count = stdev->ops->gas_read8(stdev,&stdev->mmio_ntb->partition_count);
 	stdev->mmio_part_cfg_all = stdev->mmio + SWITCHTEC_GAS_PART_CFG_OFFSET;
 	stdev->mmio_part_cfg = &stdev->mmio_part_cfg_all[stdev->partition];
 	stdev->mmio_pff_csr = stdev->mmio + SWITCHTEC_GAS_PFF_CSR_OFFSET;
@@ -1537,7 +1619,7 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	if (!use_dma_mrpc)
 		return 0;
 
-	if(!(ioread32(&stdev->mmio_mrpc->dma_ver)? true : false))
+	if(!(stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->dma_ver)? true : false))
 		return 0;
 
 
@@ -1584,10 +1666,11 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 
 	dev_dbg(&stdev->dev, "%s:  4 \n", __func__);
 	dev_dbg(&stdev->dev, "%s:  init ops normal+++\n", __func__);
-	stdev->ops = &normal_ops;
+	//stdev->ops = &normal_ops;
 	dev_dbg(&stdev->dev, "%s:  init ops normal___\n", __func__);
 
 	if (stdev->dma_mrpc){
+		switchtec_dev_open_kernel(stdev);
 		enable_dma_mrpc(stdev);
 		dev_dbg(&stdev->dev, "%s:  init ops dma\n", __func__);
 		stdev->ops = &mrpc_dma_ops;

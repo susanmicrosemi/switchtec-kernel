@@ -405,6 +405,7 @@ struct switchtec_dev {
 	 * mrpc_ fields, alive flag and stuser->state field
 	 */
 	struct mutex mrpc_mutex;
+	struct mutex syscall_mutex;
 	struct list_head mrpc_queue;
 	int mrpc_busy;
 	struct work_struct mrpc_work;
@@ -424,13 +425,14 @@ struct switchtec_dev {
 	dma_addr_t dma_mrpc_dma_addr;
 	const struct switchtec_ops *ops;
 	struct work_struct deferred_event_work;
+	struct switchtec_user *kernel_stuser;
 };
 struct switchtec_ops {
 	u32 (*gas_read8)(struct switchtec_dev *dev, void *addr);
 	u32 (*gas_read16)(struct switchtec_dev *dev, void *addr);
 	u32 (*gas_read32)(struct switchtec_dev *dev, void *addr);
 	//u64 (*gas_read64)(struct switchtec_dev *dev, void *addr);
-	void (*memcpy_from_gas)(struct switchtec_dev *dev, void *dst, const void *src, size_t n);
+	void (*memcpy_from_gas)(struct switchtec_dev *dev, void *dst, void *src, size_t n);
 };
 
 
