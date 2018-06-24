@@ -323,7 +323,9 @@ static void gas_read(struct switchtec_dev *stdev, void *offset, char *data, size
 	switchtec_dev_write_kernel(stuser, outbuf, 8);
 
 	switchtec_dev_read_kernel(stuser, outbuf, n);
+	dev_dbg(&stdev->dev, "%s: outbuf = %x, outbuf = %x, size = %zu\n", __func__, *(u32 *)outbuf, *(u32 *)(outbuf+4), n);
 	memcpy(data,outbuf,n);
+	dev_dbg(&stdev->dev, "%s: data = %x, data = %x, size = %zu\n", __func__, *(u32 *)data, *(u32 *)(data+4), n);
 }
 
 #define create_gas_rd(type, suffix) \
@@ -574,6 +576,24 @@ static ssize_t partition_count_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(partition_count);
 
+static ssize_t use_dma_mrpc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", use_dma_mrpc);
+}
+static DEVICE_ATTR_RO(use_dma_mrpc);
+
+static ssize_t mrpc_version_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct switchtec_dev *stdev = to_stdev(dev);
+	int rev = stdev->ops->gas_read32(stdev,&stdev->mmio_mrpc->dma_ver);
+
+	dev_dbg(&stdev->dev, "* %s: %d\n", __func__, rev);
+	return sprintf(buf, "%d\n", rev);
+};
+static DEVICE_ATTR_RO(mrpc_version);
+
 static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_device_version.attr,
 	&dev_attr_fw_version.attr,
@@ -585,6 +605,8 @@ static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_component_revision.attr,
 	&dev_attr_partition.attr,
 	&dev_attr_partition_count.attr,
+	&dev_attr_use_dma_mrpc.attr,
+	&dev_attr_mrpc_version.attr,
 	NULL,
 };
 
