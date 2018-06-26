@@ -69,6 +69,130 @@ struct switchtec_user {
 	int event_cnt;
 };
 
+static void _memcpy_fromio(struct switchtec_dev *stdev, void *dest,
+			   void *src, size_t size)
+{
+	memcpy_fromio(dest, src, size);
+}
+
+#ifdef readq
+#define ioread64 readq
+#endif
+
+#define create_ioread(type, suffix) \
+	static type _ioread ## suffix(struct switchtec_dev *stdev, \
+				      void *addr) \
+	{ \
+		return ioread ## suffix(addr);	\
+	}
+
+create_ioread(u32, 8);
+create_ioread(u32, 16);
+create_ioread(u32, 32);
+create_ioread(u64, 64);
+
+static const struct switchtec_ops normal_mrpc_ops = {
+	.gas_read8 = _ioread8,
+	.gas_read16 = _ioread16,
+	.gas_read32 = _ioread32,
+	.gas_read64 = _ioread64,
+	.memcpy_from_gas = _memcpy_fromio,
+};
+
+static int mrpc_queue_cmd(struct switchtec_user *stuser);
+static void stuser_set_state(struct switchtec_user *stuser,
+			     enum mrpc_state state);
+
+static int gas_read(struct switchtec_dev *stdev, void *dest,
+		     void *src, size_t size)
+{
+	struct switchtec_user *stuser;
+	u32 offset;
+	int rc;
+
+	stuser = stdev->stuser;
+	offset = src - stdev->mmio;
+
+	mutex_lock(&stdev->mrpc_mutex);
+	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
+	if (stuser->state != MRPC_IDLE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	stuser->cmd = MRPC_GAS_READ;
+	memcpy(stuser->data, &offset, sizeof(offset));
+	memcpy(stuser->data + sizeof(offset), &size, sizeof(size));
+
+	rc = mrpc_queue_cmd(stuser);
+
+	if (stuser->state == MRPC_IDLE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	stuser->read_len = size;
+	mutex_unlock(&stdev->mrpc_mutex);
+
+	wait_for_completion(&stuser->comp);
+
+	mutex_lock(&stdev->mrpc_mutex);
+	if (stuser->state != MRPC_DONE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	if (stuser->return_code) {
+		rc = -EFAULT;
+		goto out;
+	}
+
+	memcpy(dest, &stuser->data, size);
+
+	stuser_set_state(stuser, MRPC_IDLE);
+
+out:
+	mutex_unlock(&stdev->mrpc_mutex);
+	if (rc)
+		return rc;
+
+	if (stuser->status == SWITCHTEC_MRPC_STATUS_DONE)
+		rc =  0;
+	else
+		rc =  -EBADMSG;
+
+	return rc;
+
+}
+
+static void _memcpy_from_gas(struct switchtec_dev *stdev, void *dest,
+			     void *src, size_t size)
+{
+	gas_read(stdev, dest, src, size);
+}
+
+#define create_gasrd(type, suffix) \
+	static type gas_rd ## suffix(struct switchtec_dev *stdev, \
+				    void *addr) \
+{ \
+	type ret; \
+	gas_read(stdev, &ret, addr, sizeof(ret)); \
+	return ret; \
+}
+
+create_gasrd(u32, 8);
+create_gasrd(u32, 16);
+create_gasrd(u32, 32);
+create_gasrd(u64, 64);
+
+static const struct switchtec_ops dma_mrpc_ops = {
+	.gas_read8 = gas_rd8,
+	.gas_read16 = gas_rd16,
+	.gas_read32 = gas_rd32,
+	.gas_read64 = gas_rd64,
+	.memcpy_from_gas = _memcpy_from_gas,
+};
+
 static struct switchtec_user *stuser_create(struct switchtec_dev *stdev)
 {
 	struct switchtec_user *stuser;
@@ -351,6 +475,22 @@ static ssize_t partition_count_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(partition_count);
 
+static ssize_t use_dma_mrpc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", use_dma_mrpc);
+}
+static DEVICE_ATTR_RO(use_dma_mrpc);
+
+static ssize_t mrpc_version_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct switchtec_dev *stdev = to_stdev(dev);
+
+	return sprintf(buf, "%d\n", stdev->mrpc_version);
+}
+static DEVICE_ATTR_RO(mrpc_version);
+
 static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_device_version.attr,
 	&dev_attr_fw_version.attr,
@@ -362,6 +502,8 @@ static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_component_revision.attr,
 	&dev_attr_partition.attr,
 	&dev_attr_partition_count.attr,
+	&dev_attr_use_dma_mrpc.attr,
+	&dev_attr_mrpc_version.attr,
 	NULL,
 };
 
@@ -397,11 +539,11 @@ static int switchtec_dev_release(struct inode *inode, struct file *filp)
 
 static int lock_mutex_and_test_alive(struct switchtec_dev *stdev)
 {
-	if (mutex_lock_interruptible(&stdev->mrpc_mutex))
+	if (mutex_lock_interruptible(&stdev->sysc_mutex))
 		return -EINTR;
 
 	if (!stdev->alive) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		mutex_unlock(&stdev->sysc_mutex);
 		return -ENODEV;
 	}
 
@@ -446,7 +588,7 @@ static ssize_t switchtec_dev_write(struct file *filp, const char __user *data,
 	rc = mrpc_queue_cmd(stuser);
 
 out:
-	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->sysc_mutex);
 
 	if (rc)
 		return rc;
@@ -470,13 +612,13 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 		return rc;
 
 	if (stuser->state == MRPC_IDLE) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		mutex_unlock(&stdev->sysc_mutex);
 		return -EBADE;
 	}
 
 	stuser->read_len = size - sizeof(stuser->return_code);
 
-	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->sysc_mutex);
 
 	if (filp->f_flags & O_NONBLOCK) {
 		if (!try_wait_for_completion(&stuser->comp))
@@ -492,7 +634,7 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 		return rc;
 
 	if (stuser->state != MRPC_DONE) {
-		mutex_unlock(&stdev->mrpc_mutex);
+		mutex_unlock(&stdev->sysc_mutex);
 		return -EBADE;
 	}
 
@@ -514,7 +656,7 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 	stuser_set_state(stuser, MRPC_IDLE);
 
 out:
-	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->sysc_mutex);
 
 	if (stuser->status == SWITCHTEC_MRPC_STATUS_DONE)
 		return size;
@@ -536,7 +678,7 @@ static unsigned int switchtec_dev_poll(struct file *filp, poll_table *wait)
 	if (lock_mutex_and_test_alive(stdev))
 		return POLLIN | POLLRDHUP | POLLOUT | POLLERR | POLLHUP;
 
-	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->sysc_mutex);
 
 	if (try_wait_for_completion(&stuser->comp))
 		ret |= POLLIN | POLLRDNORM;
@@ -978,7 +1120,7 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	}
 
-	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->sysc_mutex);
 	return rc;
 }
 
@@ -1051,6 +1193,7 @@ static void stdev_release(struct device *dev)
 		writeq(0, &stdev->mmio_mrpc->dma_addr);
 		dma_free_coherent(&stdev->pdev->dev, sizeof(*stdev->dma_mrpc),
 				stdev->dma_mrpc, stdev->dma_mrpc_dma_addr);
+		stuser_put(stdev->stuser);
 	}
 	kfree(stdev);
 }
@@ -1095,8 +1238,10 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 
 	stdev->alive = true;
 	stdev->pdev = pdev;
+	stdev->ops = &normal_mrpc_ops;
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
+	mutex_init(&stdev->sysc_mutex);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_DELAYED_WORK(&stdev->mrpc_timeout, mrpc_timeout_work);
@@ -1183,6 +1328,10 @@ static irqreturn_t switchtec_event_isr(int irq, void *dev)
 	irqreturn_t ret = IRQ_NONE;
 	int eid, event_count = 0;
 
+	if (stdev->dma_mrpc) {
+		return IRQ_HANDLED;
+	}
+
 	reg = ioread32(&stdev->mmio_part_cfg->mrpc_comp_hdr);
 	if (reg & SWITCHTEC_EVENT_OCCURRED) {
 		dev_dbg(&stdev->dev, "%s: mrpc comp\n", __func__);
@@ -1213,6 +1362,7 @@ static irqreturn_t switchtec_dma_mrpc_isr(int irq, void *dev)
 	struct switchtec_dev *stdev = dev;
 	irqreturn_t ret = IRQ_NONE;
 
+		dev_dbg(&stdev->dev, "%s: mrpc comp\n", __func__);
 	iowrite32(SWITCHTEC_EVENT_CLEAR |
 		  SWITCHTEC_EVENT_EN_IRQ,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
@@ -1337,7 +1487,8 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	if (!use_dma_mrpc)
 		return 0;
 
-	if(!(ioread32(&stdev->mmio_mrpc->dma_ver)? true : false))
+	stdev->mrpc_version = ioread32(&stdev->mmio_mrpc->dma_ver);
+	if(!(stdev->mrpc_version ? true : false))
 		return 0;
 
 	stdev->dma_mrpc = dma_zalloc_coherent(&stdev->pdev->dev, sizeof(*stdev->dma_mrpc),
@@ -1353,7 +1504,7 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 {
 	struct switchtec_dev *stdev;
 	int rc;
-
+u32 dev;
 	if (pdev->class == MICROSEMI_NTB_CLASSCODE)
 		request_module_nowait("ntb_hw_switchtec");
 
@@ -1376,8 +1527,17 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
 	enable_link_state_events(stdev);
 
-	if (stdev->dma_mrpc)
+	if (stdev->dma_mrpc){
+		stdev->stuser = stuser_create(stdev);
+		if (IS_ERR(stdev->stuser)){
+			rc = PTR_ERR(stdev->stuser);
+			goto err_put;
+		}
+		stdev->ops = &dma_mrpc_ops;
 		enable_dma_mrpc(stdev);
+		dev = gas_rd32(stdev, &stdev->mmio_sys_info->device_id);
+		dev_dbg(&stdev->dev, "%s: dev %x\n", __FUNCTION__, dev);
+	}
 
 	rc = cdev_device_add(&stdev->cdev, &stdev->dev);
 	if (rc)
