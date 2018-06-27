@@ -69,6 +69,73 @@ struct switchtec_user {
 	int event_cnt;
 };
 
+static void _memcpy_fromio(struct switchtec_dev *stdev, void *dest,
+			   void *src, size_t n)
+{
+	memcpy_fromio(dest, src, n);
+}
+
+#ifdef readq
+#define ioread64 readq
+#endif
+
+#define create_ioread(type, suffix) \
+	static type _ioread ## suffix(struct switchtec_dev *stdev, \
+				      void *src) \
+{ \
+		return ioread ## suffix(src); \
+}
+
+create_ioread(u8, 8);
+create_ioread(u16, 16);
+create_ioread(u32, 32);
+create_ioread(u64, 64);
+
+const struct switchtec_ops mrpc_normal_ops = {
+	.gas_read8 = _ioread8,
+	.gas_read16 = _ioread16,
+	.gas_read32 = _ioread32,
+	.gas_read64 = _ioread64,
+	.memcpy_from_gas = _memcpy_fromio,
+};
+
+static int mrpc_queue_cmd(struct switchtec_user *stuser);
+static void stuser_set_state(struct switchtec_user *stuser,
+			     enum mrpc_state state);
+
+static int gas_read(struct switchtec_dev *stdev, void *dest,
+		    void *src, size_t n)
+{
+	return 0;
+}
+
+static void _memcpy_from_gas(struct switchtec_dev *stdev, void *dest,
+			     void *src, size_t n)
+{
+	gas_read(stdev, dest, src, n);
+}
+
+#define create_gasrd(type, suffix) \
+static type gasrd ## suffix(struct switchtec_dev *stdev, void *src) \
+{ \
+	type ret = 0; \
+	gas_read(stdev, &ret, src, sizeof(type)); \
+	return ret; \
+}
+
+create_gasrd(u8, 8);
+create_gasrd(u16, 16);
+create_gasrd(u32, 32);
+create_gasrd(u64, 64);
+
+const struct switchtec_ops mrpc_dma_ops = {
+	.gas_read8 = gasrd8,
+	.gas_read16 = gasrd16,
+	.gas_read32 = gasrd32,
+	.gas_read64 = gasrd64,
+	.memcpy_from_gas = _memcpy_from_gas,
+};
+
 static struct switchtec_user *stuser_create(struct switchtec_dev *stdev)
 {
 	struct switchtec_user *stuser;
