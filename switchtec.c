@@ -418,6 +418,23 @@ static ssize_t partition_count_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(partition_count);
 
+static ssize_t use_dma_mrpc_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", use_dma_mrpc);
+}
+static DEVICE_ATTR_RO(use_dma_mrpc);
+
+static ssize_t mrpc_version_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct switchtec_dev *stdev =  to_stdev(dev);
+
+	return sprintf(buf, "%d\n", stdev->mrpc_version);
+}
+static DEVICE_ATTR_RO(mrpc_version);
+
+
 static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_device_version.attr,
 	&dev_attr_fw_version.attr,
@@ -429,6 +446,8 @@ static struct attribute *switchtec_device_attrs[] = {
 	&dev_attr_component_revision.attr,
 	&dev_attr_partition.attr,
 	&dev_attr_partition_count.attr,
+	&dev_attr_use_dma_mrpc.attr,
+	&dev_attr_mrpc_version.attr,
 	NULL,
 };
 
@@ -1401,10 +1420,11 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 
 	pci_set_drvdata(pdev, stdev);
 
+	stdev->mrpc_version = ioread32(&stdev->mmio_mrpc->dma_ver);
+
 	if (!use_dma_mrpc)
 		return 0;
 
-	stdev->mrpc_version = ioread32(&stdev->mmio_mrpc->dma_ver);
 	if (stdev->mrpc_version == 0)
 		return 0;
 
