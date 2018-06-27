@@ -268,12 +268,14 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 
 	struct switchtec_user *stuser;
 
-	if (stdev->mrpc_busy)
+	if (stdev->mrpc_busy) {
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 1\n");
 		return;
-
-	if (list_empty(&stdev->mrpc_queue))
+}
+	if (list_empty(&stdev->mrpc_queue)) {
+	//dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 2\n");
 		return;
-
+}
 	stuser = list_entry(stdev->mrpc_queue.next, struct switchtec_user,
 			    list);
 
@@ -282,10 +284,10 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 	memcpy_toio(&stdev->mmio_mrpc->input_data,
 		    stuser->data, stuser->data_len);
 	iowrite32(stuser->cmd, &stdev->mmio_mrpc->cmd);
-	dev_dbg(&stdev->dev, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++ submit cmd %x\n", stuser->cmd);
+	dev_dbg(&stdev->dev, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++ submit cmd %x, stuser %p\n", stuser->cmd, stuser);
 
 	if (stdev->dma_mrpc)
-		stdev->dma_mrpc->status = 0;
+		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_INPROGRESS;
 
 	schedule_delayed_work(&stdev->mrpc_timeout,
 			      msecs_to_jiffies(500));
@@ -313,27 +315,32 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	/* requires the mrpc_mutex to already be held when called */
 	struct switchtec_user *stuser;
 
-	if (list_empty(&stdev->mrpc_queue))
-		return;
+	if (list_empty(&stdev->mrpc_queue)){
 
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 3\n");
+		return;
+}
 	stuser = list_entry(stdev->mrpc_queue.next, struct switchtec_user,
 			    list);
 
 	if (stdev->dma_mrpc) {
-		dev_dbg(&stdev->dev, "%s, dma status %x\n", __FUNCTION__,  stdev->dma_mrpc->status);
+		dev_dbg(&stdev->dev, "%s, dma status %x, stuser %p\n", __FUNCTION__,  stdev->dma_mrpc->status, stuser);
 		stuser->status = stdev->dma_mrpc->status;
 }
-	else
+	else {
 		stuser->status = ioread32(&stdev->mmio_mrpc->status);
-
-	if (stuser->status == SWITCHTEC_MRPC_STATUS_INPROGRESS)
+		dev_dbg(&stdev->dev, "%s, legacy status %x\n", __FUNCTION__,  stuser->status);
+}
+	if (stuser->status == SWITCHTEC_MRPC_STATUS_INPROGRESS) {
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 4\n");
 		return;
-
+}
 	stuser_set_state(stuser, MRPC_DONE);
 	stuser->return_code = 0;
 
 	if (stuser->status != SWITCHTEC_MRPC_STATUS_DONE){
-		dev_dbg(&stdev->dev, " 2 %s, dma status %x\n", __FUNCTION__,  stdev->dma_mrpc->status);
+		dev_dbg(&stdev->dev, " +++++++++++++++++++++++++++++++++++++ 2 %s, dma status %x\n", __FUNCTION__,  stdev->dma_mrpc->status);
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 5\n");
 		goto out;
 	}
 
@@ -349,9 +356,12 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 			dev_dbg(&stdev->dev, "-----------------------------------------------cmd %x, cmd id %x\n", stuser->cmd, stdev->dma_mrpc->cmd_id);
 	}
 
-	if (stuser->return_code != 0)
+		dev_dbg(&stdev->dev, "###################################### 1return code %x \n", stuser->return_code);
+	if (stuser->return_code != 0){
+		dev_dbg(&stdev->dev, "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ 2return code %x \n", stuser->return_code);
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 6\n");
 		goto out;
-
+	}
 	if (stdev->dma_mrpc)
 		memcpy(stuser->data, &stdev->dma_mrpc->data,
 			      stuser->read_len);
@@ -359,8 +369,8 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 		memcpy_fromio(stuser->data, &stdev->mmio_mrpc->output_data,
 			      stuser->read_len);
 
-	if (stdev->dma_mrpc)
-		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_IDLE;
+	//if (stdev->dma_mrpc)
+	//	stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_IDLE;
 		
 out:
 	complete_all(&stuser->comp);
@@ -407,8 +417,11 @@ int cnt=0;
 	else
 		status = ioread32(&stdev->mmio_mrpc->status);
 	if (status == SWITCHTEC_MRPC_STATUS_INPROGRESS) {
+	//if (status != SWITCHTEC_MRPC_STATUS_DONE) {
+		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@ %x, %s: \n", status, __func__);
 		schedule_delayed_work(&stdev->mrpc_timeout,
 				      msecs_to_jiffies(500));
+	dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 7\n");
 		goto out;
 	}
 
@@ -1499,7 +1512,9 @@ static irqreturn_t switchtec_dma_mrpc_isr(int irq, void *dev)
 static int switchtec_init_isr(struct switchtec_dev *stdev)
 {
 	int nvecs;
-	//int event_irq;
+#if 0
+	int event_irq;
+#endif
 	int dma_mrpc_irq;
 	int rc;
 
@@ -1525,9 +1540,10 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 		return rc;
 #endif
 
-	//if (!stdev->dma_mrpc)
-	//	return rc;
-
+#if 0
+	if (!stdev->dma_mrpc)
+		return rc;
+#endif
 	dma_mrpc_irq = ioread32(&stdev->mmio_mrpc->dma_vector);
 	if ( dma_mrpc_irq < 0 || dma_mrpc_irq >= nvecs)
 		return -EFAULT;
@@ -1652,7 +1668,9 @@ u32 dev;
 	iowrite32(SWITCHTEC_EVENT_CLEAR |
 		  SWITCHTEC_EVENT_EN_IRQ,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
-	//enable_link_state_events(stdev);
+#if 0
+	enable_link_state_events(stdev);
+#endif
 
 	if (stdev->dma_mrpc){
 		stdev->stuser = stuser_create(stdev);
