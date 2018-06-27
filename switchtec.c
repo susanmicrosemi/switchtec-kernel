@@ -1404,7 +1404,8 @@ static int switchtec_init_pci(struct switchtec_dev *stdev,
 	if (!use_dma_mrpc)
 		return 0;
 
-	if(!(ioread32(&stdev->mmio_mrpc->dma_ver)? true : false))
+	stdev->mrpc_version = ioread32(&stdev->mmio_mrpc->dma_ver);
+	if (stdev->mrpc_version == 0)
 		return 0;
 
 	stdev->dma_mrpc = dma_zalloc_coherent(&stdev->pdev->dev, sizeof(*stdev->dma_mrpc),
