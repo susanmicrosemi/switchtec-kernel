@@ -86,8 +86,8 @@ static void _memcpy_fromio(struct switchtec_dev *stdev, void *dest,
 		return ioread ## suffix(addr);	\
 	}
 
-create_ioread(u32, 8);
-create_ioread(u32, 16);
+create_ioread(u8, 8);
+create_ioread(u16, 16);
 create_ioread(u32, 32);
 create_ioread(u64, 64);
 
@@ -109,20 +109,25 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	struct switchtec_user *stuser;
 	u32 offset;
 	int rc;
-
+	int cnt = 0;
+	static int tag = 5;
 	stuser = stdev->stuser;
 	offset = src - stdev->mmio;
-
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
 	if (stuser->state != MRPC_IDLE) {
 		rc = -EBADE;
 		goto out;
 	}
 
-	stuser->cmd = MRPC_GAS_READ;
+	stuser->cmd = (tag<<17)|MRPC_GAS_READ;
+	tag++;
 	memcpy(stuser->data, &offset, sizeof(offset));
+	dev_dbg(&stdev->dev, "%s: %x\n",  __func__, *(u32 *)stuser->data);
 	memcpy(stuser->data + sizeof(offset), &size, sizeof(size));
+	dev_dbg(&stdev->dev, "%s: %x\n",  __func__, *(u32 *)(stuser->data + 4));
 
 	rc = mrpc_queue_cmd(stuser);
 
@@ -132,11 +137,15 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	}
 
 	stuser->read_len = size;
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 
 	wait_for_completion(&stuser->comp);
 
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	if (stuser->state != MRPC_DONE) {
 		rc = -EBADE;
 		goto out;
@@ -148,11 +157,14 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	}
 
 	memcpy(dest, &stuser->data, size);
+dev_dbg(&stdev->dev, "offset %x, val %x\n", offset, *(u32 *)dest);
 
 	stuser_set_state(stuser, MRPC_IDLE);
 
 out:
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	if (rc)
 		return rc;
 
@@ -180,8 +192,8 @@ static void _memcpy_from_gas(struct switchtec_dev *stdev, void *dest,
 	return ret; \
 }
 
-create_gasrd(u32, 8);
-create_gasrd(u32, 16);
+create_gasrd(u8, 8);
+create_gasrd(u16, 16);
 create_gasrd(u32, 32);
 create_gasrd(u64, 64);
 
@@ -270,6 +282,10 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 	memcpy_toio(&stdev->mmio_mrpc->input_data,
 		    stuser->data, stuser->data_len);
 	iowrite32(stuser->cmd, &stdev->mmio_mrpc->cmd);
+	dev_dbg(&stdev->dev, "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++ submit cmd %x\n", stuser->cmd);
+
+	if (stdev->dma_mrpc)
+		stdev->dma_mrpc->status = 0;
 
 	schedule_delayed_work(&stdev->mrpc_timeout,
 			      msecs_to_jiffies(500));
@@ -303,8 +319,10 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	stuser = list_entry(stdev->mrpc_queue.next, struct switchtec_user,
 			    list);
 
-	if (stdev->dma_mrpc)
+	if (stdev->dma_mrpc) {
+		dev_dbg(&stdev->dev, "%s, dma status %x\n", __FUNCTION__,  stdev->dma_mrpc->status);
 		stuser->status = stdev->dma_mrpc->status;
+}
 	else
 		stuser->status = ioread32(&stdev->mmio_mrpc->status);
 
@@ -314,13 +332,23 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	stuser_set_state(stuser, MRPC_DONE);
 	stuser->return_code = 0;
 
-	if (stuser->status != SWITCHTEC_MRPC_STATUS_DONE)
+	if (stuser->status != SWITCHTEC_MRPC_STATUS_DONE){
+		dev_dbg(&stdev->dev, " 2 %s, dma status %x\n", __FUNCTION__,  stdev->dma_mrpc->status);
 		goto out;
+	}
 
 	if (stdev->dma_mrpc)
 		stuser->return_code = stdev->dma_mrpc->rtn_code;
 	else
 		stuser->return_code = ioread32(&stdev->mmio_mrpc->ret_value);
+
+	if (stdev->dma_mrpc) {
+		//dev_dbg(&stdev->dev, "-----------------------------------------------cmd %x, cmd id %x\n", stuser->cmd, stdev->dma_mrpc->cmd_id);
+		if (stuser->cmd != stdev->dma_mrpc->cmd_id)
+			
+			dev_dbg(&stdev->dev, "-----------------------------------------------cmd %x, cmd id %x\n", stuser->cmd, stdev->dma_mrpc->cmd_id);
+	}
+
 	if (stuser->return_code != 0)
 		goto out;
 
@@ -330,6 +358,10 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	else
 		memcpy_fromio(stuser->data, &stdev->mmio_mrpc->output_data,
 			      stuser->read_len);
+
+	if (stdev->dma_mrpc)
+		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_IDLE;
+		
 out:
 	complete_all(&stuser->comp);
 	list_del_init(&stuser->list);
@@ -342,27 +374,33 @@ out:
 static void mrpc_event_work(struct work_struct *work)
 {
 	struct switchtec_dev *stdev;
-
+int cnt = 0;
 	stdev = container_of(work, struct switchtec_dev, mrpc_work);
 
 	dev_dbg(&stdev->dev, "%s\n", __func__);
 
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	cancel_delayed_work(&stdev->mrpc_timeout);
 	mrpc_complete_cmd(stdev);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 }
 
 static void mrpc_timeout_work(struct work_struct *work)
 {
 	struct switchtec_dev *stdev;
 	u32 status;
-
+int cnt=0;
 	stdev = container_of(work, struct switchtec_dev, mrpc_timeout.work);
 
 	dev_dbg(&stdev->dev, "%s\n", __func__);
 
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	mutex_lock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 
 	if (stdev->dma_mrpc)
 		status = stdev->dma_mrpc->status;
@@ -376,16 +414,19 @@ static void mrpc_timeout_work(struct work_struct *work)
 
 	mrpc_complete_cmd(stdev);
 out:
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 }
 
 static ssize_t device_version_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
+	const struct switchtec_ops *ops = stdev->ops;
 	u32 ver;
 
-	ver = ioread32(&stdev->mmio_sys_info->device_version);
+	ver = ops->gas_read32(stdev, &stdev->mmio_sys_info->device_version);
 
 	return sprintf(buf, "%x\n", ver);
 }
@@ -395,19 +436,22 @@ static ssize_t fw_version_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
+	const struct switchtec_ops *ops = stdev->ops;
 	u32 ver;
 
-	ver = ioread32(&stdev->mmio_sys_info->firmware_version);
+	ver = ops->gas_read32(stdev, &stdev->mmio_sys_info->firmware_version);
 
 	return sprintf(buf, "%08x\n", ver);
 }
 static DEVICE_ATTR_RO(fw_version);
 
-static ssize_t io_string_show(char *buf, void __iomem *attr, size_t len)
+static ssize_t io_string_show(struct switchtec_dev *stdev, char *buf, 
+			      void __iomem *attr, size_t len)
 {
 	int i;
+	const struct switchtec_ops *ops = stdev->ops;
 
-	memcpy_fromio(buf, attr, len);
+	ops->memcpy_from_gas(stdev, buf, attr, len);
 	buf[len] = '\n';
 	buf[len + 1] = 0;
 
@@ -426,7 +470,7 @@ static ssize_t field ## _show(struct device *dev, \
 	struct device_attribute *attr, char *buf) \
 { \
 	struct switchtec_dev *stdev = to_stdev(dev); \
-	return io_string_show(buf, &stdev->mmio_sys_info->field, \
+	return io_string_show(stdev, buf, &stdev->mmio_sys_info->field, \
 			    sizeof(stdev->mmio_sys_info->field)); \
 } \
 \
@@ -441,7 +485,9 @@ static ssize_t component_id_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
-	int id = ioread16(&stdev->mmio_sys_info->component_id);
+	const struct switchtec_ops *ops = stdev->ops;
+
+	int id = ops->gas_read16(stdev, &stdev->mmio_sys_info->component_id);
 
 	return sprintf(buf, "PM%04X\n", id);
 }
@@ -451,7 +497,9 @@ static ssize_t component_revision_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct switchtec_dev *stdev = to_stdev(dev);
-	int rev = ioread8(&stdev->mmio_sys_info->component_revision);
+	const struct switchtec_ops *ops = stdev->ops;
+
+	int rev = ops->gas_read8(stdev, &stdev->mmio_sys_info->component_revision);
 
 	return sprintf(buf, "%d\n", rev);
 }
@@ -539,11 +587,22 @@ static int switchtec_dev_release(struct inode *inode, struct file *filp)
 
 static int lock_mutex_and_test_alive(struct switchtec_dev *stdev)
 {
+int cnt = 0;
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	if (mutex_lock_interruptible(&stdev->sysc_mutex))
 		return -EINTR;
 
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
+	//if (mutex_lock_interruptible(&stdev->mrpc_mutex))
+	//	return -EINTR;
+
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 	if (!stdev->alive) {
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
+//		mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 		mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: \n", cnt++, __func__);
 		return -ENODEV;
 	}
 
@@ -556,7 +615,9 @@ static ssize_t switchtec_dev_write(struct file *filp, const char __user *data,
 	struct switchtec_user *stuser = filp->private_data;
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
+int cnt=0;
 
+	dev_dbg(&stdev->dev, "%s\n", __FUNCTION__);
 	if (size < sizeof(stuser->cmd) ||
 	    size > sizeof(stuser->cmd) + sizeof(stuser->data))
 		return -EINVAL;
@@ -588,7 +649,11 @@ static ssize_t switchtec_dev_write(struct file *filp, const char __user *data,
 	rc = mrpc_queue_cmd(stuser);
 
 out:
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 
 	if (rc)
 		return rc;
@@ -602,7 +667,9 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 	struct switchtec_user *stuser = filp->private_data;
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
+int cnt=0;
 
+	dev_dbg(&stdev->dev, "0 %s\n", __FUNCTION__);
 	if (size < sizeof(stuser->cmd) ||
 	    size > sizeof(stuser->cmd) + sizeof(stuser->data))
 		return -EINVAL;
@@ -612,14 +679,24 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 		return rc;
 
 	if (stuser->state == MRPC_IDLE) {
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//		mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 		mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 		return -EBADE;
 	}
 
 	stuser->read_len = size - sizeof(stuser->return_code);
 
+	dev_dbg(&stdev->dev, "1 %s\n", __FUNCTION__);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 
+	dev_dbg(&stdev->dev, "2 %s\n", __FUNCTION__);
 	if (filp->f_flags & O_NONBLOCK) {
 		if (!try_wait_for_completion(&stuser->comp))
 			return -EAGAIN;
@@ -629,12 +706,18 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 			return rc;
 	}
 
+	dev_dbg(&stdev->dev, "%s\n", __FUNCTION__);
 	rc = lock_mutex_and_test_alive(stdev);
 	if (rc)
 		return rc;
 
+	dev_dbg(&stdev->dev, "3 %s\n", __FUNCTION__);
 	if (stuser->state != MRPC_DONE) {
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//		mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 		mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 		return -EBADE;
 	}
 
@@ -656,8 +739,14 @@ static ssize_t switchtec_dev_read(struct file *filp, char __user *data,
 	stuser_set_state(stuser, MRPC_IDLE);
 
 out:
+	dev_dbg(&stdev->dev, "4 %s\n", __FUNCTION__);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 
+	dev_dbg(&stdev->dev, "5 %s\n", __FUNCTION__);
 	if (stuser->status == SWITCHTEC_MRPC_STATUS_DONE)
 		return size;
 	else if (stuser->status == SWITCHTEC_MRPC_STATUS_INTERRUPTED)
@@ -671,14 +760,19 @@ static unsigned int switchtec_dev_poll(struct file *filp, poll_table *wait)
 	struct switchtec_user *stuser = filp->private_data;
 	struct switchtec_dev *stdev = stuser->stdev;
 	int ret = 0;
-
+int cnt =0;
 	poll_wait(filp, &stuser->comp.wait, wait);
 	poll_wait(filp, &stdev->event_wq, wait);
 
+	dev_dbg(&stdev->dev, "%s\n", __FUNCTION__);
 	if (lock_mutex_and_test_alive(stdev))
 		return POLLIN | POLLRDHUP | POLLOUT | POLLERR | POLLHUP;
 
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 
 	if (try_wait_for_completion(&stuser->comp))
 		ret |= POLLIN | POLLRDNORM;
@@ -694,8 +788,9 @@ static int ioctl_flash_info(struct switchtec_dev *stdev,
 {
 	struct switchtec_ioctl_flash_info info = {0};
 	struct flash_info_regs __iomem *fi = stdev->mmio_flash_info;
-
-	info.flash_length = ioread32(&fi->flash_length);
+	const struct switchtec_ops *ops = stdev->ops;
+	
+	info.flash_length = ops->gas_read32(stdev, &fi->flash_length);
 	info.num_partitions = SWITCHTEC_IOCTL_NUM_PARTITIONS;
 
 	if (copy_to_user(uinfo, &info, sizeof(info)))
@@ -704,11 +799,14 @@ static int ioctl_flash_info(struct switchtec_dev *stdev,
 	return 0;
 }
 
-static void set_fw_info_part(struct switchtec_ioctl_flash_part_info *info,
+static void set_fw_info_part(struct switchtec_dev *stdev, 
+			     struct switchtec_ioctl_flash_part_info *info,
 			     struct partition_info __iomem *pi)
 {
-	info->address = ioread32(&pi->address);
-	info->length = ioread32(&pi->length);
+	const struct switchtec_ops *ops = stdev->ops;
+	
+	info->address = ops->gas_read32(stdev, &pi->address);
+	info->length = ops->gas_read32(stdev, &pi->length);
 }
 
 static int ioctl_flash_part_info(struct switchtec_dev *stdev,
@@ -718,61 +816,67 @@ static int ioctl_flash_part_info(struct switchtec_dev *stdev,
 	struct flash_info_regs __iomem *fi = stdev->mmio_flash_info;
 	struct sys_info_regs __iomem *si = stdev->mmio_sys_info;
 	u32 active_addr = -1;
+	const struct switchtec_ops *ops = stdev->ops;
+int cnt = 0;
 
 	if (copy_from_user(&info, uinfo, sizeof(info)))
 		return -EFAULT;
 
 	switch (info.flash_partition) {
 	case SWITCHTEC_IOCTL_PART_CFG0:
-		active_addr = ioread32(&fi->active_cfg);
-		set_fw_info_part(&info, &fi->cfg0);
-		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG0_RUNNING)
+	dev_dbg(&stdev->dev, "1 %d, %s: \n", cnt++, __func__);
+		active_addr = ops->gas_read32(stdev, &fi->active_cfg);
+		set_fw_info_part(stdev, &info, &fi->cfg0);
+		if (ops->gas_read16(stdev, &si->cfg_running) == SWITCHTEC_CFG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_CFG1:
-		active_addr = ioread32(&fi->active_cfg);
-		set_fw_info_part(&info, &fi->cfg1);
-		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG1_RUNNING)
+	dev_dbg(&stdev->dev, "2 %d, %s: \n", cnt++, __func__);
+		active_addr = ops->gas_read32(stdev, &fi->active_cfg);
+		set_fw_info_part(stdev, &info, &fi->cfg1);
+		if (ops->gas_read16(stdev, &si->cfg_running) == SWITCHTEC_CFG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG0:
-		active_addr = ioread32(&fi->active_img);
-		set_fw_info_part(&info, &fi->img0);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG0_RUNNING)
+	dev_dbg(&stdev->dev, "3 %d, %s: \n", cnt++, __func__);
+		active_addr = ops->gas_read32(stdev, &fi->active_img);
+		set_fw_info_part(stdev, &info, &fi->img0);
+		if (ops->gas_read16(stdev, &si->img_running) == SWITCHTEC_IMG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG1:
-		active_addr = ioread32(&fi->active_img);
-		set_fw_info_part(&info, &fi->img1);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG1_RUNNING)
+	dev_dbg(&stdev->dev, "4 %d, %s: \n", cnt++, __func__);
+		active_addr = ops->gas_read32(stdev, &fi->active_img);
+		set_fw_info_part(stdev, &info, &fi->img1);
+		if (ops->gas_read16(stdev, &si->img_running) == SWITCHTEC_IMG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_NVLOG:
-		set_fw_info_part(&info, &fi->nvlog);
+		set_fw_info_part(stdev, &info, &fi->nvlog);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR0:
-		set_fw_info_part(&info, &fi->vendor[0]);
+		set_fw_info_part(stdev, &info, &fi->vendor[0]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR1:
-		set_fw_info_part(&info, &fi->vendor[1]);
+		set_fw_info_part(stdev, &info, &fi->vendor[1]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR2:
-		set_fw_info_part(&info, &fi->vendor[2]);
+		set_fw_info_part(stdev, &info, &fi->vendor[2]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR3:
-		set_fw_info_part(&info, &fi->vendor[3]);
+		set_fw_info_part(stdev, &info, &fi->vendor[3]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR4:
-		set_fw_info_part(&info, &fi->vendor[4]);
+		set_fw_info_part(stdev, &info, &fi->vendor[4]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR5:
-		set_fw_info_part(&info, &fi->vendor[5]);
+		set_fw_info_part(stdev, &info, &fi->vendor[5]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR6:
-		set_fw_info_part(&info, &fi->vendor[6]);
+		set_fw_info_part(stdev, &info, &fi->vendor[6]);
 		break;
 	case SWITCHTEC_IOCTL_PART_VENDOR7:
-		set_fw_info_part(&info, &fi->vendor[7]);
+		set_fw_info_part(stdev, &info, &fi->vendor[7]);
 		break;
 	default:
 		return -EINVAL;
@@ -792,24 +896,25 @@ static int ioctl_event_summary(struct switchtec_dev *stdev,
 	struct switchtec_ioctl_event_summary __user *usum)
 {
 	struct switchtec_ioctl_event_summary s = {0};
+	const struct switchtec_ops *ops = stdev->ops;
 	int i;
 	u32 reg;
 
-	s.global = ioread32(&stdev->mmio_sw_event->global_summary);
-	s.part_bitmap = ioread32(&stdev->mmio_sw_event->part_event_bitmap);
-	s.local_part = ioread32(&stdev->mmio_part_cfg->part_event_summary);
+	s.global = ops->gas_read32(stdev, &stdev->mmio_sw_event->global_summary);
+	s.part_bitmap = ops->gas_read32(stdev, &stdev->mmio_sw_event->part_event_bitmap);
+	s.local_part = ops->gas_read32(stdev, &stdev->mmio_part_cfg->part_event_summary);
 
 	for (i = 0; i < stdev->partition_count; i++) {
-		reg = ioread32(&stdev->mmio_part_cfg_all[i].part_event_summary);
+		reg = ops->gas_read32(stdev, &stdev->mmio_part_cfg_all[i].part_event_summary);
 		s.part[i] = reg;
 	}
 
 	for (i = 0; i < SWITCHTEC_MAX_PFF_CSR; i++) {
-		reg = ioread16(&stdev->mmio_pff_csr[i].vendor_id);
+		reg = ops->gas_read16(stdev, &stdev->mmio_pff_csr[i].vendor_id);
 		if (reg != MICROSEMI_VENDOR_ID)
 			break;
 
-		reg = ioread32(&stdev->mmio_pff_csr[i].pff_event_summary);
+		reg = ops->gas_read32(stdev, &stdev->mmio_pff_csr[i].pff_event_summary);
 		s.pff[i] = reg;
 	}
 
@@ -911,14 +1016,15 @@ static int event_ctl(struct switchtec_dev *stdev,
 	int i;
 	u32 __iomem *reg;
 	u32 hdr;
+	const struct switchtec_ops *ops = stdev->ops;
 
 	reg = event_hdr_addr(stdev, ctl->event_id, ctl->index);
 	if (IS_ERR(reg))
 		return PTR_ERR(reg);
 
-	hdr = ioread32(reg);
+	hdr = ops->gas_read32(stdev, reg);
 	for (i = 0; i < ARRAY_SIZE(ctl->data); i++)
-		ctl->data[i] = ioread32(&reg[i + 1]);
+		ctl->data[i] = ops->gas_read32(stdev, &reg[i + 1]);
 
 	ctl->occurred = hdr & SWITCHTEC_EVENT_OCCURRED;
 	ctl->count = (hdr >> 5) & 0xFF;
@@ -1008,6 +1114,7 @@ static int ioctl_pff_to_port(struct switchtec_dev *stdev,
 	u32 reg;
 	struct part_cfg_regs *pcfg;
 	struct switchtec_ioctl_pff_port p;
+	const struct switchtec_ops *ops = stdev->ops;
 
 	if (copy_from_user(&p, up, sizeof(p)))
 		return -EFAULT;
@@ -1017,20 +1124,20 @@ static int ioctl_pff_to_port(struct switchtec_dev *stdev,
 		pcfg = &stdev->mmio_part_cfg_all[part];
 		p.partition = part;
 
-		reg = ioread32(&pcfg->usp_pff_inst_id);
+		reg = ops->gas_read32(stdev, &pcfg->usp_pff_inst_id);
 		if (reg == p.pff) {
 			p.port = 0;
 			break;
 		}
 
-		reg = ioread32(&pcfg->vep_pff_inst_id);
+		reg = ops->gas_read32(stdev, &pcfg->vep_pff_inst_id);
 		if (reg == p.pff) {
 			p.port = SWITCHTEC_IOCTL_PFF_VEP;
 			break;
 		}
 
 		for (i = 0; i < ARRAY_SIZE(pcfg->dsp_pff_inst_id); i++) {
-			reg = ioread32(&pcfg->dsp_pff_inst_id[i]);
+			reg = ops->gas_read32(stdev, &pcfg->dsp_pff_inst_id[i]);
 			if (reg != p.pff)
 				continue;
 
@@ -1053,6 +1160,7 @@ static int ioctl_port_to_pff(struct switchtec_dev *stdev,
 {
 	struct switchtec_ioctl_pff_port p;
 	struct part_cfg_regs *pcfg;
+	const struct switchtec_ops *ops = stdev->ops;
 
 	if (copy_from_user(&p, up, sizeof(p)))
 		return -EFAULT;
@@ -1066,15 +1174,15 @@ static int ioctl_port_to_pff(struct switchtec_dev *stdev,
 
 	switch (p.port) {
 	case 0:
-		p.pff = ioread32(&pcfg->usp_pff_inst_id);
+		p.pff = ops->gas_read32(stdev, &pcfg->usp_pff_inst_id);
 		break;
 	case SWITCHTEC_IOCTL_PFF_VEP:
-		p.pff = ioread32(&pcfg->vep_pff_inst_id);
+		p.pff = ops->gas_read32(stdev, &pcfg->vep_pff_inst_id);
 		break;
 	default:
 		if (p.port > ARRAY_SIZE(pcfg->dsp_pff_inst_id))
 			return -EINVAL;
-		p.pff = ioread32(&pcfg->dsp_pff_inst_id[p.port - 1]);
+		p.pff = ops->gas_read32(stdev, &pcfg->dsp_pff_inst_id[p.port - 1]);
 		break;
 	}
 
@@ -1090,29 +1198,37 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 	struct switchtec_user *stuser = filp->private_data;
 	struct switchtec_dev *stdev = stuser->stdev;
 	int rc;
+int cnt =0 ;
 	void __user *argp = (void __user *)arg;
 
+	dev_dbg(&stdev->dev, "%s\n", __FUNCTION__);
 	rc = lock_mutex_and_test_alive(stdev);
 	if (rc)
 		return rc;
 
 	switch (cmd) {
 	case SWITCHTEC_IOCTL_FLASH_INFO:
+	dev_dbg(&stdev->dev, "1 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_flash_info(stdev, argp);
 		break;
 	case SWITCHTEC_IOCTL_FLASH_PART_INFO:
+	dev_dbg(&stdev->dev, "2 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_flash_part_info(stdev, argp);
 		break;
 	case SWITCHTEC_IOCTL_EVENT_SUMMARY:
+	dev_dbg(&stdev->dev, "3 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_event_summary(stdev, stuser, argp);
 		break;
 	case SWITCHTEC_IOCTL_EVENT_CTL:
+	dev_dbg(&stdev->dev, "4 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_event_ctl(stdev, argp);
 		break;
 	case SWITCHTEC_IOCTL_PFF_TO_PORT:
+	dev_dbg(&stdev->dev, "5 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_pff_to_port(stdev, argp);
 		break;
 	case SWITCHTEC_IOCTL_PORT_TO_PFF:
+	dev_dbg(&stdev->dev, "6 %d, %s: %p\n", cnt++, __func__, stuser);
 		rc = ioctl_port_to_pff(stdev, argp);
 		break;
 	default:
@@ -1120,7 +1236,11 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	}
 
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
+//	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	mutex_unlock(&stdev->sysc_mutex);
+	dev_dbg(&stdev->dev, "%d, %s: %p\n", cnt++, __func__, stuser);
 	return rc;
 }
 
@@ -1144,16 +1264,17 @@ static void link_event_work(struct work_struct *work)
 	if (stdev->link_notifier)
 		stdev->link_notifier(stdev);
 }
-
+#if 0
 static void check_link_state_events(struct switchtec_dev *stdev)
 {
 	int idx;
 	u32 reg;
 	int count;
 	int occurred = 0;
+	const struct switchtec_ops *ops = stdev->ops;
 
 	for (idx = 0; idx < stdev->pff_csr_count; idx++) {
-		reg = ioread32(&stdev->mmio_pff_csr[idx].link_state_hdr);
+		reg = ops->gas_read32(stdev, &stdev->mmio_pff_csr[idx].link_state_hdr);
 		dev_dbg(&stdev->dev, "link_state: %d->%08x\n", idx, reg);
 		count = (reg >> 5) & 0xFF;
 
@@ -1166,7 +1287,6 @@ static void check_link_state_events(struct switchtec_dev *stdev)
 	if (occurred)
 		schedule_work(&stdev->link_event_work);
 }
-
 static void enable_link_state_events(struct switchtec_dev *stdev)
 {
 	int idx;
@@ -1178,6 +1298,7 @@ static void enable_link_state_events(struct switchtec_dev *stdev)
 	}
 }
 
+#endif
 static void enable_dma_mrpc(struct switchtec_dev *stdev)
 {
 	writeq(stdev->dma_mrpc_dma_addr, &stdev->mmio_mrpc->dma_addr);
@@ -1276,15 +1397,16 @@ err_put:
 	put_device(&stdev->dev);
 	return ERR_PTR(rc);
 }
-
+#if 0
 static int mask_event(struct switchtec_dev *stdev, int eid, int idx)
 {
 	size_t off = event_regs[eid].offset;
 	u32 __iomem *hdr_reg;
 	u32 hdr;
+	const struct switchtec_ops *ops = stdev->ops;
 
 	hdr_reg = event_regs[eid].map_reg(stdev, off, idx);
-	hdr = ioread32(hdr_reg);
+	hdr = ops->gas_read32(stdev, hdr_reg);
 
 	if (!(hdr & SWITCHTEC_EVENT_OCCURRED && hdr & SWITCHTEC_EVENT_EN_IRQ))
 		return 0;
@@ -1320,7 +1442,9 @@ static int mask_all_events(struct switchtec_dev *stdev, int eid)
 
 	return count;
 }
+#endif
 
+#if 0
 static irqreturn_t switchtec_event_isr(int irq, void *dev)
 {
 	struct switchtec_dev *stdev = dev;
@@ -1355,7 +1479,7 @@ static irqreturn_t switchtec_event_isr(int irq, void *dev)
 
 	return ret;
 }
-
+#endif
 
 static irqreturn_t switchtec_dma_mrpc_isr(int irq, void *dev)
 {
@@ -1375,7 +1499,7 @@ static irqreturn_t switchtec_dma_mrpc_isr(int irq, void *dev)
 static int switchtec_init_isr(struct switchtec_dev *stdev)
 {
 	int nvecs;
-	int event_irq;
+	//int event_irq;
 	int dma_mrpc_irq;
 	int rc;
 
@@ -1384,6 +1508,7 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 	if (nvecs < 0)
 		return nvecs;
 
+#if 0
 	event_irq = ioread32(&stdev->mmio_part_cfg->vep_vector_number);
 	if (event_irq < 0 || event_irq >= nvecs)
 		return -EFAULT;
@@ -1398,16 +1523,18 @@ static int switchtec_init_isr(struct switchtec_dev *stdev)
 
 	if (rc)
 		return rc;
+#endif
 
-	if (!stdev->dma_mrpc)
-		return rc;
+	//if (!stdev->dma_mrpc)
+	//	return rc;
 
 	dma_mrpc_irq = ioread32(&stdev->mmio_mrpc->dma_vector);
 	if ( dma_mrpc_irq < 0 || dma_mrpc_irq >= nvecs)
 		return -EFAULT;
 
 	dma_mrpc_irq  = pci_irq_vector(stdev->pdev, dma_mrpc_irq);
-	if (event_irq < 0)
+	//if (event_irq < 0)
+	if (dma_mrpc_irq  < 0)
 		return dma_mrpc_irq;
 
 	rc = devm_request_irq(&stdev->pdev->dev, dma_mrpc_irq,
@@ -1440,7 +1567,7 @@ static void init_pff(struct switchtec_dev *stdev)
 		stdev->pff_local[reg] = 1;
 
 	for (i = 0; i < ARRAY_SIZE(pcfg->dsp_pff_inst_id); i++) {
-		reg = ioread32(&pcfg->dsp_pff_inst_id[i]);
+		reg = ioread32(&pcfg->dsp_pff_inst_id[i]); 
 		if (reg < SWITCHTEC_MAX_PFF_CSR)
 			stdev->pff_local[reg] = 1;
 	}
@@ -1525,7 +1652,7 @@ u32 dev;
 	iowrite32(SWITCHTEC_EVENT_CLEAR |
 		  SWITCHTEC_EVENT_EN_IRQ,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
-	enable_link_state_events(stdev);
+	//enable_link_state_events(stdev);
 
 	if (stdev->dma_mrpc){
 		stdev->stuser = stuser_create(stdev);

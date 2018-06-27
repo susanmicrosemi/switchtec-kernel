@@ -35,6 +35,8 @@
 
 #define SWITCHTEC_DMA_MRPC_EN	BIT(0)
 #define SWITCHTEC_GASRD_INPUT_LEN (8)
+#define SWITCHTEC_CMD_TAG_SHIFT	(17)
+#define SWITCHTEC_CMD_TAG_MASK	(0xf)
 
 enum {
 	MRPC_GAS_READ = 0x29,
@@ -64,6 +66,7 @@ struct mrpc_regs {
 } __packed;
 
 enum mrpc_status {
+	SWITCHTEC_MRPC_STATUS_IDLE = 0,
 	SWITCHTEC_MRPC_STATUS_INPROGRESS = 1,
 	SWITCHTEC_MRPC_STATUS_DONE = 2,
 	SWITCHTEC_MRPC_STATUS_ERROR = 0xFF,
@@ -432,8 +435,8 @@ struct switchtec_dev {
 };
 
 struct switchtec_ops {
-	u32 (*gas_read8)(struct switchtec_dev *dev, void *addr);
-	u32 (*gas_read16)(struct switchtec_dev *dev, void *addr);
+	u8 (*gas_read8)(struct switchtec_dev *dev, void *addr);
+	u16 (*gas_read16)(struct switchtec_dev *dev, void *addr);
 	u32 (*gas_read32)(struct switchtec_dev *dev, void *addr);
 	u64 (*gas_read64)(struct switchtec_dev *dev, void *addr);
 	void (*memcpy_from_gas)(struct switchtec_dev *dev, void *dst, void *src, size_t n);
