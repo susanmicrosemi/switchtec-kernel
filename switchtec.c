@@ -216,6 +216,11 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 
 	schedule_delayed_work(&stdev->mrpc_timeout,
 			      msecs_to_jiffies(500));
+
+	if (stdev->dma_mrpc) {
+		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_INPROGRESS;
+		memset(stuser->data, 0xff, SWITCHTEC_MRPC_PAYLOAD_SIZE);
+	}
 }
 
 static int mrpc_queue_cmd(struct switchtec_user *stuser)
@@ -267,9 +272,12 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 	if (stuser->return_code != 0)
 		goto out;
 
-	if (stdev->dma_mrpc)
+	if (stdev->dma_mrpc) {
+		stuser->read_len = (stuser->read_len > stdev->dma_mrpc->output_size) ?
+				stdev->dma_mrpc->output_size : stuser->read_len;
 		memcpy(stuser->data, &stdev->dma_mrpc->data,
 			      stuser->read_len);
+	}
 	else
 		memcpy_fromio(stuser->data, &stdev->mmio_mrpc->output_data,
 			      stuser->read_len);
