@@ -1189,8 +1189,10 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 
 	stdev->alive = true;
 	stdev->pdev = pdev;
+	stdev->ops = &mrpc_normal_ops;
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
+	mutex_init(&stdev->sysc_mutex);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_DELAYED_WORK(&stdev->mrpc_timeout, mrpc_timeout_work);
