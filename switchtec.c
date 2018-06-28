@@ -1145,6 +1145,7 @@ static void stdev_release(struct device *dev)
 		writeq(0, &stdev->mmio_mrpc->dma_addr);
 		dma_free_coherent(&stdev->pdev->dev, sizeof(*stdev->dma_mrpc),
 				stdev->dma_mrpc, stdev->dma_mrpc_dma_addr);
+		stuser_put(stdev->stuser);
 	}
 	kfree(stdev);
 }
@@ -1474,8 +1475,15 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 		  &stdev->mmio_part_cfg->mrpc_comp_hdr);
 	enable_link_state_events(stdev);
 
-	if (stdev->dma_mrpc)
+	if (stdev->dma_mrpc) {
+		stdev->stuser = stuser_create(stdev);
+		if (IS_ERR(stdev->stuser)) {
+			rc = PTR_ERR(stdev->stuser);
+			goto err_put;
+		}
+		stdev->ops = &mrpc_dma_ops;
 		enable_dma_mrpc(stdev);
+	}
 
 	rc = cdev_device_add(&stdev->cdev, &stdev->dev);
 	if (rc)
