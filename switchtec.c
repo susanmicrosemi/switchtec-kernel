@@ -106,7 +106,51 @@ static void stuser_set_state(struct switchtec_user *stuser,
 static int gas_read(struct switchtec_dev *stdev, void *dest,
 		    void *src, size_t n)
 {
-	return 0;
+	struct switchtec_user *stuser = stdev->stuser;
+	u32 offset;
+	int rc;
+
+	offset = src - stdev->mmio;
+	mutex_lock(&stdev->mrpc_mutex);
+	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
+	if (stuser->state != MRPC_IDLE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	stuser->cmd = MRPC_GAS_READ;
+	memcpy(stuser->data, &offset, sizeof(offset));
+	memcpy(stuser->data + sizeof(offset), &n, sizeof(n));
+
+	rc = mrpc_queue_cmd(stuser);
+	if (stuser->state == MRPC_IDLE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	stuser->read_len = n;
+	mutex_unlock(&stdev->mrpc_mutex);
+	wait_for_completion(&stuser->comp);
+	mutex_lock(&stdev->mrpc_mutex);
+	if (stuser->state != MRPC_DONE) {
+		rc = -EBADE;
+		goto out;
+	}
+
+	if (stuser->return_code) {
+		rc = -EFAULT;
+		goto out;
+	}
+	memcpy(dest, &stuser->data, n);
+	stuser_set_state(stuser, MRPC_IDLE);
+
+out:
+	mutex_unlock(&stdev->mrpc_mutex);
+	dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
+	if (rc)
+		return rc;
+
+	return n;
 }
 
 static void _memcpy_from_gas(struct switchtec_dev *stdev, void *dest,
@@ -118,7 +162,7 @@ static void _memcpy_from_gas(struct switchtec_dev *stdev, void *dest,
 #define create_gasrd(type, suffix) \
 static type gasrd ## suffix(struct switchtec_dev *stdev, void *src) \
 { \
-	type ret = 0; \
+	type ret; \
 	gas_read(stdev, &ret, src, sizeof(type)); \
 	return ret; \
 }
@@ -1483,6 +1527,7 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 		}
 		stdev->ops = &mrpc_dma_ops;
 		enable_dma_mrpc(stdev);
+		stdev->ops->gas_read32(stdev, &stdev->mmio_sys_info->device_id);
 	}
 
 	rc = cdev_device_add(&stdev->cdev, &stdev->dev);
