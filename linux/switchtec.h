@@ -429,6 +429,7 @@ struct switchtec_dev {
 	struct switchtec_user *stuser;
 	//struct mutex sysc_mutex;
 	int mrpc_version;
+	struct work_struct events_work;
 };
 
 struct switchtec_ops {
