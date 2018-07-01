@@ -671,10 +671,10 @@ static unsigned int switchtec_dev_poll(struct file *filp, poll_table *wait)
 	poll_wait(filp, &stuser->comp.wait, wait);
 	poll_wait(filp, &stdev->event_wq, wait);
 
-	if (lock_mutex_and_test_alive(stdev))
+	//if (lock_mutex_and_test_alive(stdev))
 		return POLLIN | POLLRDHUP | POLLOUT | POLLERR | POLLHUP;
 
-	mutex_unlock(&stdev->mrpc_mutex);
+	//mutex_unlock(&stdev->mrpc_mutex);
 
 	if (try_wait_for_completion(&stuser->comp))
 		ret |= POLLIN | POLLRDNORM;
@@ -1088,9 +1088,9 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 	int rc;
 	void __user *argp = (void __user *)arg;
 
-	rc = lock_mutex_and_test_alive(stdev);
-	if (rc)
-		return rc;
+	//rc = lock_mutex_and_test_alive(stdev);
+	//if (rc)
+	//	return rc;
 
 	switch (cmd) {
 	case SWITCHTEC_IOCTL_FLASH_INFO:
@@ -1116,7 +1116,7 @@ static long switchtec_dev_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	}
 
-	mutex_unlock(&stdev->mrpc_mutex);
+	//mutex_unlock(&stdev->mrpc_mutex);
 	return rc;
 }
 
@@ -1237,7 +1237,7 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 	stdev->ops = &mrpc_normal_ops;
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
-	mutex_init(&stdev->sysc_mutex);
+	//mutex_init(&stdev->sysc_mutex);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_DELAYED_WORK(&stdev->mrpc_timeout, mrpc_timeout_work);

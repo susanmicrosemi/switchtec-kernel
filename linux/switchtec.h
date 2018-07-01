@@ -427,7 +427,7 @@ struct switchtec_dev {
 
 	const struct switchtec_ops *ops;
 	struct switchtec_user *stuser;
-	struct mutex sysc_mutex;
+	//struct mutex sysc_mutex;
 	int mrpc_version;
 };
 
