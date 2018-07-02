@@ -426,9 +426,9 @@ struct switchtec_dev {
 	dma_addr_t dma_mrpc_dma_addr;
 
 	const struct switchtec_ops *ops;
-	struct switchtec_user *stuser;
+	//struct switchtec_user *stuser;
 	//struct mutex sysc_mutex;
-	struct mutex mutex_read;
+	//struct mutex mutex_read;
 	int mrpc_version;
 	struct work_struct events_work;
 };

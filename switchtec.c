@@ -102,15 +102,17 @@ const struct switchtec_ops mrpc_normal_ops = {
 static int mrpc_queue_cmd(struct switchtec_user *stuser);
 static void stuser_set_state(struct switchtec_user *stuser,
 			     enum mrpc_state state);
+static struct switchtec_user *stuser_create(struct switchtec_dev *stdev);
 
 static int gas_read(struct switchtec_dev *stdev, void *dest,
 		    void *src, size_t n)
 {
-	struct switchtec_user *stuser = stdev->stuser;
+	//struct switchtec_user *stuser = stdev->stuser;
+	struct switchtec_user *stuser = stuser_create(stdev);
 	u32 offset;
 	int rc;
 
-	mutex_lock(&stdev->mutex_read);
+	//mutex_lock(&stdev->mutex_read);
 
 	offset = src - stdev->mmio;
 	mutex_lock(&stdev->mrpc_mutex);
@@ -155,7 +157,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 out:
 	mutex_unlock(&stdev->mrpc_mutex);
-	mutex_unlock(&stdev->mutex_read);
+	//mutex_unlock(&stdev->mutex_read);
 	
 	dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
 	if (rc)
@@ -1220,7 +1222,7 @@ static void stdev_release(struct device *dev)
 		writeq(0, &stdev->mmio_mrpc->dma_addr);
 		dma_free_coherent(&stdev->pdev->dev, sizeof(*stdev->dma_mrpc),
 				stdev->dma_mrpc, stdev->dma_mrpc_dma_addr);
-		stuser_put(stdev->stuser);
+		//stuser_put(stdev->stuser);
 	}
 	kfree(stdev);
 }
@@ -1271,7 +1273,7 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
 	//mutex_init(&stdev->sysc_mutex);
-	mutex_init(&stdev->mutex_read);
+	//mutex_init(&stdev->mutex_read);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_WORK(&stdev->events_work, post_events_work);
@@ -1582,11 +1584,13 @@ static int switchtec_pci_probe(struct pci_dev *pdev,
 	enable_link_state_events(stdev);
 
 	if (stdev->dma_mrpc) {
+#if 0
 		stdev->stuser = stuser_create(stdev);
 		if (IS_ERR(stdev->stuser)) {
 			rc = PTR_ERR(stdev->stuser);
 			goto err_put;
 		}
+#endif
 		stdev->ops = &mrpc_dma_ops;
 		enable_dma_mrpc(stdev);
 		stdev->ops->gas_read32(stdev, &stdev->mmio_sys_info->device_id);
