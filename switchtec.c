@@ -379,6 +379,7 @@ static void mrpc_timeout_work(struct work_struct *work)
 	else
 		status = ioread32(&stdev->mmio_mrpc->status);
 	if (status == SWITCHTEC_MRPC_STATUS_INPROGRESS) {
+		dev_dbg(&stdev->dev, "+++++++++++++++++++++++++++++++++ %s status: %x\n", __func__, status);
 		schedule_delayed_work(&stdev->mrpc_timeout,
 				      msecs_to_jiffies(500));
 		goto out;
@@ -694,10 +695,10 @@ static unsigned int switchtec_dev_poll(struct file *filp, poll_table *wait)
 	poll_wait(filp, &stuser->comp.wait, wait);
 	poll_wait(filp, &stdev->event_wq, wait);
 
-	//if (lock_mutex_and_test_alive(stdev))
+	if (lock_mutex_and_test_alive(stdev))
 		return POLLIN | POLLRDHUP | POLLOUT | POLLERR | POLLHUP;
 
-	//mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->mrpc_mutex);
 
 	if (try_wait_for_completion(&stuser->comp))
 		ret |= POLLIN | POLLRDNORM;
