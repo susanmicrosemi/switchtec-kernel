@@ -428,6 +428,7 @@ struct switchtec_dev {
 	const struct switchtec_ops *ops;
 	struct switchtec_user *stuser;
 	//struct mutex sysc_mutex;
+	struct mutex mutex_read;
 	int mrpc_version;
 	struct work_struct events_work;
 };

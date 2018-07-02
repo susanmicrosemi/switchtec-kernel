@@ -110,10 +110,13 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	u32 offset;
 	int rc;
 
+	mutex_lock(&stdev->mutex_read);
+
 	offset = src - stdev->mmio;
 	mutex_lock(&stdev->mrpc_mutex);
 	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
 	if (stuser->state != MRPC_IDLE) {
+		dev_dbg(&stdev->dev, "0\n");
 		rc = -EBADE;
 		goto out;
 	}
@@ -124,28 +127,36 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 	rc = mrpc_queue_cmd(stuser);
 	if (stuser->state == MRPC_IDLE) {
+		dev_dbg(&stdev->dev, "1\n");
 		rc = -EBADE;
 		goto out;
 	}
-
 	stuser->read_len = n;
 	mutex_unlock(&stdev->mrpc_mutex);
 	wait_for_completion(&stuser->comp);
 	mutex_lock(&stdev->mrpc_mutex);
 	if (stuser->state != MRPC_DONE) {
+		dev_dbg(&stdev->dev, "2\n");
 		rc = -EBADE;
 		goto out;
 	}
 
+#if 0
 	if (stuser->return_code) {
+		dev_dbg(&stdev->dev, "3\n");
 		rc = -EFAULT;
 		goto out;
 	}
+
+#endif
+
 	memcpy(dest, &stuser->data, n);
 	stuser_set_state(stuser, MRPC_IDLE);
 
 out:
 	mutex_unlock(&stdev->mrpc_mutex);
+	mutex_unlock(&stdev->mutex_read);
+	
 	dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
 	if (rc)
 		return rc;
@@ -252,6 +263,12 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 	stuser = list_entry(stdev->mrpc_queue.next, struct switchtec_user,
 			    list);
 
+	if (stdev->dma_mrpc) {
+		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_INPROGRESS;
+		//memset(stuser->data, 0xff, SWITCHTEC_MRPC_PAYLOAD_SIZE);
+		memset(stdev->dma_mrpc->data, 0xff, SWITCHTEC_MRPC_PAYLOAD_SIZE);
+	}
+
 	stuser_set_state(stuser, MRPC_RUNNING);
 	stdev->mrpc_busy = 1;
 	memcpy_toio(&stdev->mmio_mrpc->input_data,
@@ -261,10 +278,6 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 	schedule_delayed_work(&stdev->mrpc_timeout,
 			      msecs_to_jiffies(500));
 
-	if (stdev->dma_mrpc) {
-		stdev->dma_mrpc->status = SWITCHTEC_MRPC_STATUS_INPROGRESS;
-		memset(stuser->data, 0xff, SWITCHTEC_MRPC_PAYLOAD_SIZE);
-	}
 }
 
 static int mrpc_queue_cmd(struct switchtec_user *stuser)
@@ -317,8 +330,8 @@ static void mrpc_complete_cmd(struct switchtec_dev *stdev)
 		goto out;
 
 	if (stdev->dma_mrpc) {
-		stuser->read_len = (stuser->read_len > stdev->dma_mrpc->output_size) ?
-				stdev->dma_mrpc->output_size : stuser->read_len;
+		//stuser->read_len = (stuser->read_len > stdev->dma_mrpc->output_size) ?
+		//		stdev->dma_mrpc->output_size : stuser->read_len;
 		memcpy(stuser->data, &stdev->dma_mrpc->data,
 			      stuser->read_len);
 	}
@@ -1258,6 +1271,7 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 	INIT_LIST_HEAD(&stdev->mrpc_queue);
 	mutex_init(&stdev->mrpc_mutex);
 	//mutex_init(&stdev->sysc_mutex);
+	mutex_init(&stdev->mutex_read);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
 	INIT_WORK(&stdev->events_work, post_events_work);
