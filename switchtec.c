@@ -123,7 +123,8 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 
 	if ( (offset > 0x233000) || 
-		((offset < 0x134000) && (offset > 0x74000) ))
+		((offset < 0x134000) && (offset > 0x74000)) || 
+		(offset == 0x1000c))
 	{
 		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@ out of range @@@@@@@@\n");
 		
