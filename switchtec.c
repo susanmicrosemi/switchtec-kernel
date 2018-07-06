@@ -115,6 +115,26 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	//mutex_lock(&stdev->mutex_read);
 
 	offset = src - stdev->mmio;
+
+
+	if ( (offset > 0x233000) || 
+		((offset < 0x134000) && (offset > 0x74000) ))
+	{
+		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@ out of range @@@@@@@@\n");
+		
+		if (n == 1)
+			*(uint8_t *)dest = ioread8(src);
+		else if (n == 2)
+			*(uint16_t *)dest = ioread16(src);
+		else if (n == 4)
+			*(uint32_t *)dest = ioread32(src);
+		else if (n == 8)
+			*(uint64_t *)dest = ioread64(src);
+
+		return 0;
+			
+	}
+
 	mutex_lock(&stdev->mrpc_mutex);
 	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
 	if (stuser->state != MRPC_IDLE) {
