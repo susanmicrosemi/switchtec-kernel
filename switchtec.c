@@ -191,9 +191,11 @@ out:
 	}
 	else if (n == 2) {
 		tmp16 = ioread16(src);
-		if (tmp16 != *(uint16_t *)dest) {
-			memcpy(dest, &tmp16, n);
-			dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 16 offset %x, val %x, val ioread %x\n", offset, *(u16 *)stuser->data, tmp16);
+		if (offset != 0x1000c) {
+			if (tmp16 != *(uint16_t *)dest) {
+				memcpy(dest, &tmp16, n);
+				dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 16 offset %x, val %x, val ioread %x\n", offset, *(u16 *)stuser->data, tmp16);
+			}
 		}
 	}
 	else if (n == 4) {
