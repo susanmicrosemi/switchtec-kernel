@@ -111,12 +111,12 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	struct switchtec_user *stuser = stuser_create(stdev);
 	u32 offset;
 	int rc;
-
+#if 0
 	u8 tmp8;
 	u16 tmp16;
 	u32 tmp32;
 	u64 tmp64;
-
+#endif
 	//mutex_lock(&stdev->mutex_read);
 
 	offset = src - stdev->mmio;
@@ -182,6 +182,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 out:
 
+#if 0
 	if (n == 1){
 		tmp8 = ioread8(src);
 		if (tmp8 != *(uint8_t *)dest) {
@@ -213,7 +214,7 @@ out:
 
 		}
 	}
-
+#endif
 	
 	mutex_unlock(&stdev->mrpc_mutex);
 	//mutex_unlock(&stdev->mutex_read);
