@@ -111,7 +111,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	struct switchtec_user *stuser = stuser_create(stdev);
 	u32 offset;
 	int rc;
-#if 0
+#if 1
 	u8 tmp8;
 	u16 tmp16;
 	u32 tmp32;
@@ -183,7 +183,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 out:
 
-#if 0
+#if 1
 	if (n == 1){
 		tmp8 = ioread8(src);
 		if (tmp8 != *(uint8_t *)dest) {
@@ -193,12 +193,12 @@ out:
 	}
 	else if (n == 2) {
 		tmp16 = ioread16(src);
-		if (offset != 0x1000c) {
+		//if (offset != 0x1000c) {
 			if (tmp16 != *(uint16_t *)dest) {
 				memcpy(dest, &tmp16, n);
 				dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 16 offset %x, val %x, val ioread %x\n", offset, *(u16 *)stuser->data, tmp16);
 			}
-		}
+		//}
 	}
 	else if (n == 4) {
 		tmp32 = ioread32(src);
