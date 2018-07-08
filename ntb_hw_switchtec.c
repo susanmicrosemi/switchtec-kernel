@@ -260,8 +260,9 @@ static void switchtec_ntb_mw_clr_direct(struct switchtec_ntb *sndev, int idx)
 	struct ntb_ctrl_regs __iomem *ctl = sndev->mmio_peer_ctrl;
 	int bar = sndev->peer_direct_mw_to_bar[idx];
 	u32 ctl_val;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
-	ctl_val = ioread32(&ctl->bar_entry[bar].ctl);
+	ctl_val = ops->gas_read32(sndev->stdev, &ctl->bar_entry[bar].ctl);
 	ctl_val &= ~NTB_CTRL_BAR_DIR_WIN_EN;
 	iowrite32(ctl_val, &ctl->bar_entry[bar].ctl);
 	iowrite32(0, &ctl->bar_entry[bar].win_size);
