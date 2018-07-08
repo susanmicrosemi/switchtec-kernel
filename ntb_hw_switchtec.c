@@ -1431,8 +1431,9 @@ static int switchtec_ntb_init_db_msg_irq(struct switchtec_ntb *sndev)
 	int message_irq = 0;
 	int event_irq;
 	int idb_vecs = sizeof(sndev->mmio_self_dbmsg->idb_vec_map);
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
-	event_irq = ioread32(&sndev->stdev->mmio_part_cfg->vep_vector_number);
+	event_irq = ops->gas_read32(sndev->stdev, &sndev->stdev->mmio_part_cfg->vep_vector_number);
 
 	while (doorbell_irq == event_irq)
 		doorbell_irq++;
