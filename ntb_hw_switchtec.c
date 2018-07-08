@@ -861,6 +861,7 @@ static int switchtec_ntb_init_sndev(struct switchtec_ntb *sndev)
 	int self;
 	u64 part_map;
 	int bit;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	sndev->ntb.pdev = sndev->stdev->pdev;
 	sndev->ntb.topo = NTB_TOPO_SWITCH;
@@ -873,11 +874,11 @@ static int switchtec_ntb_init_sndev(struct switchtec_ntb *sndev)
 	sndev->mmio_ntb = sndev->stdev->mmio_ntb;
 
 	self = sndev->self_partition;
-	tpart_vec = ioread32(&sndev->mmio_ntb->ntp_info[self].target_part_high);
+	tpart_vec = ops->gas_read32(sndev->stdev, &sndev->mmio_ntb->ntp_info[self].target_part_high);
 	tpart_vec <<= 32;
-	tpart_vec |= ioread32(&sndev->mmio_ntb->ntp_info[self].target_part_low);
+	tpart_vec |= ops->gas_read32(sndev->stdev, &sndev->mmio_ntb->ntp_info[self].target_part_low);
 
-	part_map = ioread64(&sndev->mmio_ntb->ep_map);
+	part_map = ops->gas_read64(sndev->stdev, &sndev->mmio_ntb->ep_map);
 	part_map &= ~(1 << sndev->self_partition);
 
 	if (!ffs(tpart_vec)) {
