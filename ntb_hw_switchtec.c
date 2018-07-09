@@ -937,13 +937,14 @@ static int config_rsvd_lut_win(struct switchtec_ntb *sndev,
 	int peer_bar = sndev->peer_direct_mw_to_bar[0];
 	u32 ctl_val;
 	int rc;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	rc = switchtec_ntb_part_op(sndev, ctl, NTB_CTRL_PART_OP_LOCK,
 				   NTB_CTRL_PART_STATUS_LOCKED);
 	if (rc)
 		return rc;
 
-	ctl_val = ioread32(&ctl->bar_entry[peer_bar].ctl);
+	ctl_val = ops->gas_read32(sndev->stdev, &ctl->bar_entry[peer_bar].ctl);
 	ctl_val &= 0xFF;
 	ctl_val |= NTB_CTRL_BAR_LUT_WIN_EN;
 	ctl_val |= ilog2(LUT_SIZE) << 8;
@@ -958,8 +959,8 @@ static int config_rsvd_lut_win(struct switchtec_ntb *sndev,
 	if (rc) {
 		u32 bar_error, lut_error;
 
-		bar_error = ioread32(&ctl->bar_error);
-		lut_error = ioread32(&ctl->lut_error);
+		bar_error = ops->gas_read32(sndev->stdev, &ctl->bar_error);
+		lut_error = ops->gas_read32(sndev->stdev, &ctl->lut_error);
 		dev_err(&sndev->stdev->dev,
 			"Error setting up reserved lut window: %08x / %08x\n",
 			bar_error, lut_error);
