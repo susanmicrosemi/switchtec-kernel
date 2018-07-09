@@ -1117,7 +1117,9 @@ static int crosslink_enum_partition(struct switchtec_ntb *sndev,
 {
 	struct part_cfg_regs __iomem *part_cfg =
 		&sndev->stdev->mmio_part_cfg_all[sndev->peer_partition];
-	u32 pff = ioread32(&part_cfg->vep_pff_inst_id);
+	const struct switchtec_ops *ops = sndev->stdev->ops;
+
+	u32 pff = ops->gas_read32(sndev->stdev, &part_cfg->vep_pff_inst_id);
 	struct pff_csr_regs __iomem *mmio_pff =
 		&sndev->stdev->mmio_pff_csr[pff];
 	const u64 bar_space = 0x1000000000LL;
@@ -1129,7 +1131,7 @@ static int crosslink_enum_partition(struct switchtec_ntb *sndev,
 
 	for (i = 0; i < ARRAY_SIZE(mmio_pff->pci_bar64); i++) {
 		iowrite64(bar_space * i, &mmio_pff->pci_bar64[i]);
-		bar_addr = ioread64(&mmio_pff->pci_bar64[i]);
+		bar_addr = ops->gas_read64(sndev->stdev, &mmio_pff->pci_bar64[i]);
 		bar_addr &= ~0xf;
 
 		dev_dbg(&sndev->stdev->dev,
