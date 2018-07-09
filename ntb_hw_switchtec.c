@@ -1093,9 +1093,10 @@ static int crosslink_setup_req_ids(struct switchtec_ntb *sndev,
 	int req_ids[16];
 	int i;
 	u32 proxy_id;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	for (i = 0; i < ARRAY_SIZE(req_ids); i++) {
-		proxy_id = ioread32(&sndev->mmio_self_ctrl->req_id_table[i]);
+		proxy_id = ops->gas_read32(sndev->stdev, &sndev->mmio_self_ctrl->req_id_table[i]);
 
 		if (!(proxy_id & NTB_CTRL_REQ_ID_EN))
 			break;
