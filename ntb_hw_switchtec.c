@@ -1030,6 +1030,7 @@ static int crosslink_setup_mws(struct switchtec_ntb *sndev, int ntb_lut_idx,
 	int bar;
 	int xlate_pos;
 	u32 ctl_val;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	rc = switchtec_ntb_part_op(sndev, ctl, NTB_CTRL_PART_OP_LOCK,
 				   NTB_CTRL_PART_STATUS_LOCKED);
@@ -1059,7 +1060,7 @@ static int crosslink_setup_mws(struct switchtec_ntb *sndev, int ntb_lut_idx,
 		if (offset && size > offset)
 			size = offset;
 
-		ctl_val = ioread32(&ctl->bar_entry[bar].ctl);
+		ctl_val = ops->gas_read32(sndev->stdev, &ctl->bar_entry[bar].ctl);
 		ctl_val |= NTB_CTRL_BAR_DIR_WIN_EN;
 
 		iowrite32(ctl_val, &ctl->bar_entry[bar].ctl);
@@ -1075,8 +1076,8 @@ static int crosslink_setup_mws(struct switchtec_ntb *sndev, int ntb_lut_idx,
 	if (rc) {
 		u32 bar_error, lut_error;
 
-		bar_error = ioread32(&ctl->bar_error);
-		lut_error = ioread32(&ctl->lut_error);
+		bar_error = ops->gas_read32(sndev->stdev, &ctl->bar_error);
+		lut_error = ops->gas_read32(sndev->stdev, &ctl->lut_error);
 		dev_err(&sndev->stdev->dev,
 			"Error setting up cross link windows: %08x / %08x\n",
 			bar_error, lut_error);
