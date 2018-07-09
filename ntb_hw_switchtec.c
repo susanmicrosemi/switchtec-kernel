@@ -314,6 +314,7 @@ static int switchtec_ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
 	int xlate_pos = ilog2(size);
 	int nr_direct_mw = sndev->peer_nr_direct_mw;
 	int rc;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	if (pidx != NTB_DEF_PEER_IDX)
 		return -EINVAL;
@@ -363,7 +364,7 @@ static int switchtec_ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
 	if (rc == -EIO) {
 		dev_err(&sndev->stdev->dev,
 			"Hardware reported an error configuring mw %d: %08x\n",
-			widx, ioread32(&ctl->bar_error));
+			widx, ops->gas_read32(sndev->stdev, &ctl->bar_error));
 
 		if (widx < nr_direct_mw)
 			switchtec_ntb_mw_clr_direct(sndev, widx);
