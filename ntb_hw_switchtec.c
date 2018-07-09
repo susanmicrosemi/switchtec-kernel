@@ -1211,13 +1211,14 @@ static void switchtec_ntb_deinit_crosslink(struct switchtec_ntb *sndev)
 		pci_iounmap(sndev->stdev->pdev, sndev->mmio_xlink_win);
 }
 
-static int map_bars(int *map, struct ntb_ctrl_regs __iomem *ctrl)
+static int map_bars(struct switchtec_ntb *sndev, int *map, struct ntb_ctrl_regs __iomem *ctrl)
 {
 	int i;
 	int cnt = 0;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	for (i = 0; i < ARRAY_SIZE(ctrl->bar_entry); i++) {
-		u32 r = ioread32(&ctrl->bar_entry[i].ctl);
+		u32 r = ops->gas_read32(sndev->stdev, &ctrl->bar_entry[i].ctl);
 
 		if (r & NTB_CTRL_BAR_VALID)
 			map[cnt++] = i;
@@ -1228,7 +1229,7 @@ static int map_bars(int *map, struct ntb_ctrl_regs __iomem *ctrl)
 
 static void switchtec_ntb_init_mw(struct switchtec_ntb *sndev)
 {
-	sndev->nr_direct_mw = map_bars(sndev->direct_mw_to_bar,
+	sndev->nr_direct_mw = map_bars(sndev, sndev->direct_mw_to_bar,
 				       sndev->mmio_self_ctrl);
 
 	sndev->nr_lut_mw = ioread16(&sndev->mmio_self_ctrl->lut_table_entries);
@@ -1237,7 +1238,7 @@ static void switchtec_ntb_init_mw(struct switchtec_ntb *sndev)
 	dev_dbg(&sndev->stdev->dev, "MWs: %d direct, %d lut\n",
 		sndev->nr_direct_mw, sndev->nr_lut_mw);
 
-	sndev->peer_nr_direct_mw = map_bars(sndev->peer_direct_mw_to_bar,
+	sndev->peer_nr_direct_mw = map_bars(sndev, sndev->peer_direct_mw_to_bar,
 					    sndev->mmio_peer_ctrl);
 
 	sndev->peer_nr_lut_mw =
