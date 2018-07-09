@@ -111,10 +111,36 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	struct switchtec_user *stuser = stuser_create(stdev);
 	u32 offset;
 	int rc;
-
+#if 1
+	u8 tmp8;
+	u16 tmp16;
+	u32 tmp32;
+	u64 tmp64;
+#endif
 	//mutex_lock(&stdev->mutex_read);
 
 	offset = src - stdev->mmio;
+
+
+	if ( (offset > 0x233000) || 
+		((offset < 0x134000) && (offset > 0x74000)) || 
+		(offset == 0x1000c))
+	{
+		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@ out of range @@@@@@@@\n");
+		
+		if (n == 1)
+			*(uint8_t *)dest = ioread8(src);
+		else if (n == 2)
+			*(uint16_t *)dest = ioread16(src);
+		else if (n == 4)
+			*(uint32_t *)dest = ioread32(src);
+		else if (n == 8)
+			*(uint64_t *)dest = ioread64(src);
+
+		return 0;
+			
+	}
+
 	mutex_lock(&stdev->mrpc_mutex);
 	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
 	if (stuser->state != MRPC_IDLE) {
@@ -143,9 +169,9 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 		goto out;
 	}
 
-#if 0
+#if 1
 	if (stuser->return_code) {
-		dev_dbg(&stdev->dev, "3\n");
+		dev_dbg(&stdev->dev, "############################################ 3 #####################################\n");
 		rc = -EFAULT;
 		goto out;
 	}
@@ -156,10 +182,46 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	stuser_set_state(stuser, MRPC_IDLE);
 
 out:
+
+#if 1
+	if (n == 1){
+		tmp8 = ioread8(src);
+		if (tmp8 != *(uint8_t *)dest) {
+			memcpy(dest, &tmp8, n);
+			dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&& 8 offset %x, val %x, val ioread %x\n", offset, *(u8 *)stuser->data, tmp8);
+		}
+	}
+	else if (n == 2) {
+		tmp16 = ioread16(src);
+		//if (offset != 0x1000c) {
+			if (tmp16 != *(uint16_t *)dest) {
+				memcpy(dest, &tmp16, n);
+				dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 16 offset %x, val %x, val ioread %x\n", offset, *(u16 *)stuser->data, tmp16);
+			}
+		//}
+	}
+	else if (n == 4) {
+		tmp32 = ioread32(src);
+		if (tmp32 != *(uint32_t *)dest) {
+			memcpy(dest, &tmp32, n);
+			dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 32 offset %x, val %x, val ioread %x\n", offset, *(u32 *)stuser->data, tmp32);
+		}
+	}
+	else if (n == 8) {
+		tmp64 = ioread64(src);
+		if (tmp64 != *(uint64_t *)dest) {
+			memcpy(dest, &tmp64, n);
+			dev_dbg(&stdev->dev, "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& 64 offset %x, val %llx, val ioread %llx\n", offset, *(u64 *)stuser->data, tmp64);
+
+		}
+	}
+#endif
+	
 	mutex_unlock(&stdev->mrpc_mutex);
 	//mutex_unlock(&stdev->mutex_read);
 	
-	dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
+	//dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
+	//dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, ioread32(src), stdev->dma_mrpc->output_size);
 	if (rc)
 		return rc;
 

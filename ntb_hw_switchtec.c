@@ -144,6 +144,7 @@ static int switchtec_ntb_part_op(struct switchtec_ntb *sndev,
 	int i;
 	u32 ps;
 	int status;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	switch (op) {
 	case NTB_CTRL_PART_OP_LOCK:
@@ -167,7 +168,7 @@ static int switchtec_ntb_part_op(struct switchtec_ntb *sndev,
 			return -EINTR;
 		}
 
-		ps = ioread32(&ctl->partition_status) & 0xFFFF;
+		ps = ops->gas_read32(sndev->stdev, &ctl->partition_status) & 0xFFFF;
 
 		if (ps != status)
 			break;
@@ -180,7 +181,7 @@ static int switchtec_ntb_part_op(struct switchtec_ntb *sndev,
 		dev_err(&sndev->stdev->dev,
 			"Timed out while performing %s (%d). (%08x)\n",
 			op_text[op], op,
-			ioread32(&ctl->partition_status));
+			ops->gas_read32(sndev->stdev, &ctl->partition_status));
 
 		return -ETIMEDOUT;
 	}
