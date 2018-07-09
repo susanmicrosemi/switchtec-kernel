@@ -1229,10 +1229,12 @@ static int map_bars(struct switchtec_ntb *sndev, int *map, struct ntb_ctrl_regs 
 
 static void switchtec_ntb_init_mw(struct switchtec_ntb *sndev)
 {
+	const struct switchtec_ops *ops = sndev->stdev->ops;
+
 	sndev->nr_direct_mw = map_bars(sndev, sndev->direct_mw_to_bar,
 				       sndev->mmio_self_ctrl);
 
-	sndev->nr_lut_mw = ioread16(&sndev->mmio_self_ctrl->lut_table_entries);
+	sndev->nr_lut_mw = ops->gas_read16(sndev->stdev, &sndev->mmio_self_ctrl->lut_table_entries);
 	sndev->nr_lut_mw = rounddown_pow_of_two(sndev->nr_lut_mw);
 
 	dev_dbg(&sndev->stdev->dev, "MWs: %d direct, %d lut\n",
@@ -1242,7 +1244,7 @@ static void switchtec_ntb_init_mw(struct switchtec_ntb *sndev)
 					    sndev->mmio_peer_ctrl);
 
 	sndev->peer_nr_lut_mw =
-		ioread16(&sndev->mmio_peer_ctrl->lut_table_entries);
+		ops->gas_read16(sndev->stdev, &sndev->mmio_peer_ctrl->lut_table_entries);
 	sndev->peer_nr_lut_mw = rounddown_pow_of_two(sndev->peer_nr_lut_mw);
 
 	dev_dbg(&sndev->stdev->dev, "Peer MWs: %d direct, %d lut\n",
