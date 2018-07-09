@@ -977,8 +977,9 @@ static int config_req_id_table(struct switchtec_ntb *sndev,
 	int i, rc = 0;
 	u32 error;
 	u32 proxy_id;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
-	if (ioread32(&mmio_ctrl->req_id_table_size) < count) {
+	if (ops->gas_read32(sndev->stdev, &mmio_ctrl->req_id_table_size) < count) {
 		dev_err(&sndev->stdev->dev,
 			"Not enough requester IDs available.\n");
 		return -EFAULT;
@@ -997,7 +998,7 @@ static int config_req_id_table(struct switchtec_ntb *sndev,
 		iowrite32(req_ids[i] << 16 | NTB_CTRL_REQ_ID_EN,
 			  &mmio_ctrl->req_id_table[i]);
 
-		proxy_id = ioread32(&mmio_ctrl->req_id_table[i]);
+		proxy_id = ops->gas_read32(sndev->stdev, &mmio_ctrl->req_id_table[i]);
 		dev_dbg(&sndev->stdev->dev,
 			"Requester ID %02X:%02X.%X -> BB:%02X.%X\n",
 			req_ids[i] >> 8, (req_ids[i] >> 3) & 0x1F,
@@ -1010,7 +1011,7 @@ static int config_req_id_table(struct switchtec_ntb *sndev,
 				   NTB_CTRL_PART_STATUS_NORMAL);
 
 	if (rc == -EIO) {
-		error = ioread32(&mmio_ctrl->req_id_error);
+		error = ops->gas_read32(sndev->stdev, &mmio_ctrl->req_id_error);
 		dev_err(&sndev->stdev->dev,
 			"Error setting up the requester ID table: %08x\n",
 			error);
