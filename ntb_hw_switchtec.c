@@ -239,6 +239,7 @@ static int switchtec_ntb_mw_get_align(struct ntb_dev *ntb, int pidx,
 
 	lut = widx >= sndev->peer_nr_direct_mw;
 	size = ioread64(&sndev->peer_shared->mw_sizes[widx]);
+	dev_dbg(&sndev->stdev->dev, "%s : offset %lx\n", __FUNCTION__, (u8 *)&sndev->peer_shared->mw_sizes[widx] - (u8 *)sndev->stdev->mmio);
 
 	if (size == 0)
 		return -EINVAL;
@@ -463,8 +464,8 @@ static void switchtec_ntb_part_link_speed(struct switchtec_ntb *sndev,
 	u32 pff = ioread32(&stdev->mmio_part_cfg[partition].vep_pff_inst_id);
 	u32 linksta = ioread32(&stdev->mmio_pff_csr[pff].pci_cap_region[13]);
 
-	dev_dbg(&sndev->stdev->dev, "offset 1 %lx\n", (u8 *)&stdev->mmio_part_cfg[partition].vep_pff_inst_id - (u8 *)stdev->mmio);
-	dev_dbg(&sndev->stdev->dev, "offset 2 %lx\n", (u8 *)&stdev->mmio_pff_csr[pff].pci_cap_region[13] - (u8 *)stdev->mmio);
+	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_part_cfg[partition].vep_pff_inst_id - (u8 *)stdev->mmio);
+	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_pff_csr[pff].pci_cap_region[13] - (u8 *)stdev->mmio);
 
 	if (speed)
 		*speed = (linksta >> 16) & 0xF;
@@ -497,7 +498,7 @@ static int crosslink_is_enabled(struct switchtec_ntb *sndev)
 {
 	struct ntb_info_regs __iomem *inf = sndev->mmio_ntb;
 
-	dev_dbg(&sndev->stdev->dev, "offset 3 %lx\n", (u8 *)&inf->ntp_info[sndev->peer_partition].xlink_enabled - (u8 *)sndev->stdev->mmio);
+	dev_dbg(&sndev->stdev->dev, "%s, offset %lx\n", __FUNCTION__, (u8 *)&inf->ntp_info[sndev->peer_partition].xlink_enabled - (u8 *)sndev->stdev->mmio);
 	return ioread8(&inf->ntp_info[sndev->peer_partition].xlink_enabled);
 }
 
@@ -560,6 +561,7 @@ static void switchtec_ntb_check_link(struct switchtec_ntb *sndev,
 	link_sta = sndev->self_shared->link_sta;
 	if (link_sta) {
 		u64 peer = ioread64(&sndev->peer_shared->magic);
+		dev_dbg(&sndev->stdev->dev, "%s : offset %lx\n", __FUNCTION__, (u8 *)&sndev->peer_shared->magic - (u8 *)sndev->stdev->mmio);
 
 		if ((peer & 0xFFFFFFFF) == SWITCHTEC_NTB_MAGIC)
 			link_sta = peer >> 32;
@@ -660,6 +662,7 @@ static u64 switchtec_ntb_db_read(struct ntb_dev *ntb)
 	struct switchtec_ntb *sndev = ntb_sndev(ntb);
 
 	ret = ioread64(&sndev->mmio_self_dbmsg->idb) >> sndev->db_shift;
+	dev_dbg(&sndev->stdev->dev, "%s : offset %lx\n", __FUNCTION__, (u8 *)&sndev->mmio_self_dbmsg->idb - (u8 *)sndev->stdev->mmio);
 
 	return ret & sndev->db_valid_mask;
 }
@@ -795,6 +798,7 @@ static u32 switchtec_ntb_peer_spad_read(struct ntb_dev *ntb, int pidx,
 	if (!sndev->peer_shared)
 		return 0;
 
+	dev_dbg(&sndev->stdev->dev, "%s : offset %lx\n", __FUNCTION__, (u8 *)&sndev->peer_shared->spad[sidx] - (u8 *)sndev->stdev->mmio);
 	return ioread32(&sndev->peer_shared->spad[sidx]);
 }
 
@@ -1324,6 +1328,7 @@ switchtec_ntb_init_req_id_table(struct switchtec_ntb *sndev)
 	 * Host Bridge Requester ID (as read from the mmap address)
 	 */
 	req_ids[1] = ioread16(&sndev->mmio_ntb->requester_id);
+	dev_dbg(&sndev->stdev->dev, "%s : offset %lx\n", __FUNCTION__, (u8 *)&sndev->mmio_ntb->requester_id - (u8 *)sndev->stdev->mmio);
 
 	return config_req_id_table(sndev, sndev->mmio_self_ctrl, req_ids,
 				   ARRAY_SIZE(req_ids));
