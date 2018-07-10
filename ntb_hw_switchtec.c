@@ -463,6 +463,9 @@ static void switchtec_ntb_part_link_speed(struct switchtec_ntb *sndev,
 	u32 pff = ioread32(&stdev->mmio_part_cfg[partition].vep_pff_inst_id);
 	u32 linksta = ioread32(&stdev->mmio_pff_csr[pff].pci_cap_region[13]);
 
+	dev_dbg(&sndev->stdev->dev, "offset 1 %lx\n", (u8 *)&stdev->mmio_part_cfg[partition].vep_pff_inst_id - (u8 *)stdev->mmio);
+	dev_dbg(&sndev->stdev->dev, "offset 2 %lx\n", (u8 *)&stdev->mmio_pff_csr[pff].pci_cap_region[13] - (u8 *)stdev->mmio);
+
 	if (speed)
 		*speed = (linksta >> 16) & 0xF;
 
@@ -494,6 +497,7 @@ static int crosslink_is_enabled(struct switchtec_ntb *sndev)
 {
 	struct ntb_info_regs __iomem *inf = sndev->mmio_ntb;
 
+	dev_dbg(&sndev->stdev->dev, "offset 3 %lx\n", (u8 *)&inf->ntp_info[sndev->peer_partition].xlink_enabled - (u8 *)sndev->stdev->mmio);
 	return ioread8(&inf->ntp_info[sndev->peer_partition].xlink_enabled);
 }
 
