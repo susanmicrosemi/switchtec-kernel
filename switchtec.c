@@ -126,7 +126,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 		((offset < 0x134000) && (offset > 0x74000)) || 
 		(offset == 0x1000c))
 	{
-		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@ out of range @@@@@@@@\n");
+		dev_dbg(&stdev->dev, "@@@@@@@@@@@@@@@@@ out of range @@@@@@@@, offset = %x\n", offset);
 		
 		if (n == 1)
 			*(uint8_t *)dest = ioread8(src);
