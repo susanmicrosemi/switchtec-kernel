@@ -460,9 +460,10 @@ static void switchtec_ntb_part_link_speed(struct switchtec_ntb *sndev,
 					  enum ntb_width *width)
 {
 	struct switchtec_dev *stdev = sndev->stdev;
+	const struct switchtec_ops *ops = stdev->ops;
 
-	u32 pff = ioread32(&stdev->mmio_part_cfg[partition].vep_pff_inst_id);
-	u32 linksta = ioread32(&stdev->mmio_pff_csr[pff].pci_cap_region[13]);
+	u32 pff = ops->gas_read32(stdev, &stdev->mmio_part_cfg[partition].vep_pff_inst_id);
+	u32 linksta = ops->gas_read32(stdev, &stdev->mmio_pff_csr[pff].pci_cap_region[13]);
 
 	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_part_cfg[partition].vep_pff_inst_id - (u8 *)stdev->mmio);
 	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_pff_csr[pff].pci_cap_region[13] - (u8 *)stdev->mmio);
@@ -497,9 +498,10 @@ static void switchtec_ntb_set_link_speed(struct switchtec_ntb *sndev)
 static int crosslink_is_enabled(struct switchtec_ntb *sndev)
 {
 	struct ntb_info_regs __iomem *inf = sndev->mmio_ntb;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	dev_dbg(&sndev->stdev->dev, "%s, offset %lx\n", __FUNCTION__, (u8 *)&inf->ntp_info[sndev->peer_partition].xlink_enabled - (u8 *)sndev->stdev->mmio);
-	return ioread8(&inf->ntp_info[sndev->peer_partition].xlink_enabled);
+	return ops->gas_read8(sndev->stdev, &inf->ntp_info[sndev->peer_partition].xlink_enabled);
 }
 
 static void crosslink_init_dbmsgs(struct switchtec_ntb *sndev)
@@ -1427,10 +1429,10 @@ static irqreturn_t switchtec_ntb_message_isr(int irq, void *dev)
 {
 	int i;
 	struct switchtec_ntb *sndev = dev;
-	const struct switchtec_ops *ops = sndev->stdev->ops;
+	//const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	for (i = 0; i < ARRAY_SIZE(sndev->mmio_self_dbmsg->imsg); i++) {
-		u64 msg = ops->gas_read64(sndev->stdev, &sndev->mmio_self_dbmsg->imsg[i]);
+		u64 msg = ioread64(&sndev->mmio_self_dbmsg->imsg[i]);
 
 	dev_dbg(&sndev->stdev->dev, "ntb message isr offset %lx\n", (u8*)&sndev->mmio_self_dbmsg->imsg[i] - (u8*)sndev->stdev->mmio);
 		if (msg & NTB_DBMSG_IMSG_STATUS) {
