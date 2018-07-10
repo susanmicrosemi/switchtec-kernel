@@ -1427,6 +1427,7 @@ static irqreturn_t switchtec_ntb_message_isr(int irq, void *dev)
 	for (i = 0; i < ARRAY_SIZE(sndev->mmio_self_dbmsg->imsg); i++) {
 		u64 msg = ops->gas_read64(sndev->stdev, &sndev->mmio_self_dbmsg->imsg[i]);
 
+	dev_dbg(&sndev->stdev->dev, "ntb message isr offset %lx\n", (u8*)&sndev->mmio_self_dbmsg->imsg[i] - (u8*)sndev->stdev->mmio);
 		if (msg & NTB_DBMSG_IMSG_STATUS) {
 			dev_dbg(&sndev->stdev->dev, "message: %d %08x\n",
 				i, (u32)msg);
