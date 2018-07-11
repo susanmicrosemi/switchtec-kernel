@@ -121,7 +121,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 
 	offset = src - stdev->mmio;
 
-
+#if 0
 	if ( (offset > 0x233000) || 
 		((offset < 0x134000) && (offset > 0x74000)) || 
 		(offset == 0x1000c))
@@ -140,7 +140,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 		return 0;
 			
 	}
-
+#endif
 	mutex_lock(&stdev->mrpc_mutex);
 	stuser->data_len = SWITCHTEC_GASRD_INPUT_LEN;
 	if (stuser->state != MRPC_IDLE) {

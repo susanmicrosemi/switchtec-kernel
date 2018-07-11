@@ -124,6 +124,7 @@ struct switchtec_ntb {
 	enum ntb_speed link_speed;
 	enum ntb_width link_width;
 	struct work_struct link_reinit_work;
+	struct work_struct link_check_work;
 };
 
 static struct switchtec_ntb *ntb_sndev(struct ntb_dev *ntb)
@@ -460,11 +461,13 @@ static void switchtec_ntb_part_link_speed(struct switchtec_ntb *sndev,
 					  enum ntb_width *width)
 {
 	struct switchtec_dev *stdev = sndev->stdev;
-	const struct switchtec_ops *ops = stdev->ops;
+	const struct switchtec_ops *ops = sndev->stdev->ops;
 
 	u32 pff = ops->gas_read32(stdev, &stdev->mmio_part_cfg[partition].vep_pff_inst_id);
 	u32 linksta = ops->gas_read32(stdev, &stdev->mmio_pff_csr[pff].pci_cap_region[13]);
 
+	//u32 pff = ioread32(&stdev->mmio_part_cfg[partition].vep_pff_inst_id);
+	//u32 linksta = ioread32(&stdev->mmio_pff_csr[pff].pci_cap_region[13]);
 	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_part_cfg[partition].vep_pff_inst_id - (u8 *)stdev->mmio);
 	dev_dbg(&sndev->stdev->dev, "%s offset %lx\n", __FUNCTION__, (u8 *)&stdev->mmio_pff_csr[pff].pci_cap_region[13] - (u8 *)stdev->mmio);
 
@@ -502,6 +505,7 @@ static int crosslink_is_enabled(struct switchtec_ntb *sndev)
 
 	dev_dbg(&sndev->stdev->dev, "%s, offset %lx\n", __FUNCTION__, (u8 *)&inf->ntp_info[sndev->peer_partition].xlink_enabled - (u8 *)sndev->stdev->mmio);
 	return ops->gas_read8(sndev->stdev, &inf->ntp_info[sndev->peer_partition].xlink_enabled);
+	//return ioread8(&inf->ntp_info[sndev->peer_partition].xlink_enabled);
 }
 
 static void crosslink_init_dbmsgs(struct switchtec_ntb *sndev)
@@ -584,6 +588,18 @@ static void switchtec_ntb_check_link(struct switchtec_ntb *sndev,
 			crosslink_init_dbmsgs(sndev);
 	}
 }
+
+static void link_check_work(struct work_struct *work)
+{
+	struct switchtec_ntb *sndev;
+	u64 msg;
+
+	sndev = container_of(work, struct switchtec_ntb, link_check_work);
+	msg = ioread64(&sndev->mmio_self_dbmsg->imsg[LINK_MESSAGE]);
+
+	switchtec_ntb_check_link(sndev, msg);
+}
+
 
 static void switchtec_ntb_link_notification(struct switchtec_dev *stdev)
 {
@@ -881,6 +897,7 @@ static int switchtec_ntb_init_sndev(struct switchtec_ntb *sndev)
 	sndev->ntb.ops = &switchtec_ntb_ops;
 
 	INIT_WORK(&sndev->link_reinit_work, link_reinit_work);
+	INIT_WORK(&sndev->link_check_work, link_check_work);
 
 	sndev->self_partition = sndev->stdev->partition;
 
@@ -1441,7 +1458,8 @@ static irqreturn_t switchtec_ntb_message_isr(int irq, void *dev)
 			iowrite8(1, &sndev->mmio_self_dbmsg->imsg[i].status);
 
 			if (i == LINK_MESSAGE)
-				switchtec_ntb_check_link(sndev, msg);
+				schedule_work(&sndev->link_check_work);
+				//switchtec_ntb_check_link(sndev, msg);
 		}
 	}
 
