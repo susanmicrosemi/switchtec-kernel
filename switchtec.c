@@ -103,6 +103,7 @@ static int mrpc_queue_cmd(struct switchtec_user *stuser);
 static void stuser_set_state(struct switchtec_user *stuser,
 			     enum mrpc_state state);
 static struct switchtec_user *stuser_create(struct switchtec_dev *stdev);
+static void stuser_put(struct switchtec_user *stuser);
 
 static int gas_read(struct switchtec_dev *stdev, void *dest,
 		    void *src, size_t n)
@@ -219,7 +220,7 @@ out:
 	
 	mutex_unlock(&stdev->mrpc_mutex);
 	//mutex_unlock(&stdev->mutex_read);
-	
+	stuser_put(stuser);
 	//dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, *(u32 *)stuser->data, stdev->dma_mrpc->output_size);
 	//dev_dbg(&stdev->dev, "offset %x, val %x, ops %x\n", offset, ioread32(src), stdev->dma_mrpc->output_size);
 	if (rc)
