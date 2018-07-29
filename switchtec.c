@@ -104,6 +104,7 @@ static void stuser_set_state(struct switchtec_user *stuser,
 			     enum mrpc_state state);
 static struct switchtec_user *stuser_create(struct switchtec_dev *stdev);
 static void stuser_put(struct switchtec_user *stuser);
+static void mrpc_complete_cmd(struct switchtec_dev *stdev);
 
 static int gas_read(struct switchtec_dev *stdev, void *dest,
 		    void *src, size_t n)
@@ -111,6 +112,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	struct switchtec_user *stuser = stuser_create(stdev);
 	u32 offset;
 	int rc;
+	unsigned long timeout;
 
 	offset = src - stdev->mmio;
 
@@ -123,7 +125,7 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 		goto out;
 	}
 
-	stuser->cmd = MRPC_GAS_READ;
+	stuser->cmd = MRPC_GAS_READ | SWITCHTEC_DMA_MRPC_NNTY;
 	memcpy(stuser->data, &offset, sizeof(offset));
 	memcpy(stuser->data + sizeof(offset), &n, sizeof(n));
 
@@ -134,13 +136,20 @@ static int gas_read(struct switchtec_dev *stdev, void *dest,
 	}
 
 	stuser->read_len = n;
+	
+	timeout = jiffies + HZ/2;
+	while (time_before(jiffies, timeout)) {
+		if (SWITCHTEC_MRPC_STATUS_INPROGRESS != stdev->dma_mrpc->status)
+			break;	
+	}
 
-	mutex_unlock(&stdev->mrpc_mutex);
-
-	wait_for_completion(&stuser->comp);
-
-	mutex_lock(&stdev->mrpc_mutex);
+	mrpc_complete_cmd(stdev);
 	if (stuser->state != MRPC_DONE) {
+		rc = -EBADE;
+		goto out;
+	}
+	
+	if (stuser->return_code != 0) {
 		rc = -EBADE;
 		goto out;
 	}
@@ -269,8 +278,9 @@ static void mrpc_cmd_submit(struct switchtec_dev *stdev)
 		    stuser->data, stuser->data_len);
 	iowrite32(stuser->cmd, &stdev->mmio_mrpc->cmd);
 
-	schedule_delayed_work(&stdev->mrpc_timeout,
-			      msecs_to_jiffies(500));
+	if (stdev->dma_mrpc && !(stuser->cmd & SWITCHTEC_DMA_MRPC_NNTY))
+		schedule_delayed_work(&stdev->mrpc_timeout,
+				      msecs_to_jiffies(500));
 }
 
 static int mrpc_queue_cmd(struct switchtec_user *stuser)
@@ -1237,8 +1247,6 @@ static void stdev_kill(struct switchtec_dev *stdev)
 	wake_up_interruptible(&stdev->event_wq);
 }
 
-void static post_events_work(struct work_struct *);
-
 static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 {
 	struct switchtec_dev *stdev;
@@ -1259,7 +1267,6 @@ static struct switchtec_dev *stdev_create(struct pci_dev *pdev)
 	mutex_init(&stdev->mrpc_mutex);
 	stdev->mrpc_busy = 0;
 	INIT_WORK(&stdev->mrpc_work, mrpc_event_work);
-	INIT_WORK(&stdev->events_work, post_events_work);
 	INIT_DELAYED_WORK(&stdev->mrpc_timeout, mrpc_timeout_work);
 	INIT_WORK(&stdev->link_event_work, link_event_work);
 	init_waitqueue_head(&stdev->event_wq);
@@ -1338,38 +1345,12 @@ static int mask_all_events(struct switchtec_dev *stdev, int eid)
 	return count;
 }
 
-static void post_events_work(struct work_struct *work)
-{
-	struct switchtec_dev *stdev;
-	int eid, event_count = 0;
-
-	stdev =  container_of(work, struct switchtec_dev, events_work);
-
-	dev_dbg(&stdev->dev, "%s\n", __func__);
-
-	check_link_state_events(stdev);
-	for (eid = 0; eid < SWITCHTEC_IOCTL_MAX_EVENTS; eid++)
-		event_count += mask_all_events(stdev, eid);
-
-	if (event_count) {
-		atomic_inc(&stdev->event_cnt);
-		wake_up_interruptible(&stdev->event_wq);
-		dev_dbg(&stdev->dev, "%s: %d events\n", __func__,
-			event_count);
-	}
-}
-
 static irqreturn_t switchtec_event_isr(int irq, void *dev)
 {
 	struct switchtec_dev *stdev = dev;
 	u32 reg;
 	irqreturn_t ret = IRQ_NONE;
 	int eid, event_count = 0;
-
-	if (stdev->dma_mrpc) {
-		schedule_work(&stdev->events_work);
-		return IRQ_HANDLED;
-	}
 
 	reg = ioread32(&stdev->mmio_part_cfg->mrpc_comp_hdr);
 	if (reg & SWITCHTEC_EVENT_OCCURRED) {

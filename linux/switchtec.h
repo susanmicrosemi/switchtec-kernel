@@ -35,6 +35,7 @@
 
 #define SWITCHTEC_DMA_MRPC_EN	BIT(0)
 #define SWITCHTEC_GASRD_INPUT_LEN (8)
+#define SWITCHTEC_DMA_MRPC_NNTY	BIT(16)
 
 enum {
 	MRPC_GAS_READ = 0x29,
@@ -426,7 +427,6 @@ struct switchtec_dev {
 	dma_addr_t dma_mrpc_dma_addr;
 	const struct switchtec_ops *ops;
 	int mrpc_version;
-	struct work_struct events_work;
 };
 
 struct switchtec_ops {
