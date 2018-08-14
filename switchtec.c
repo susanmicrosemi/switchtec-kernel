@@ -576,13 +576,17 @@ static void set_fw_info_part(struct switchtec_ioctl_flash_part_info *info,
 	info->length = ioread32(&pi->length);
 }
 
-static int ioctl_flash_part_info_in(struct switchtec_dev *stdev,
-				    struct switchtec_ioctl_flash_part_info *info)
+static int ioctl_flash_part_info(struct switchtec_dev *stdev,
+				    struct switchtec_ioctl_flash_part_info __user *info)
 {
+	struct switchtec_ioctl_flash_part_info info = {0};
 	struct flash_info_regs __iomem *fi = stdev->mmio_flash_info;
 	struct sys_info_regs __iomem *si = stdev->mmio_sys_info;
-	u32 active_bl2_flag,active_cfg_flag,active_img_flag;
+	u32 active_bl2_flag, active_cfg_flag, active_img_flag;
 	u32 active_flag;
+
+	if (copy_from_user(&info, uinfo, sizeof(info)))
+		return -EFAULT;
 
 	switch (info->flash_partition) {
 	case SWITCHTEC_IOCTL_PART_BL20:
@@ -676,24 +680,10 @@ static int ioctl_flash_part_info_in(struct switchtec_dev *stdev,
 		return -EINVAL;
 	}
 
-	return 0;
-}
-
-static int ioctl_flash_part_info(struct switchtec_dev *stdev,
-				 struct switchtec_ioctl_flash_part_info __user *uinfo)
-{
-	int ret;
-	struct switchtec_ioctl_flash_part_info info = {0};
-
-	if (copy_from_user(&info, uinfo, sizeof(info)))
-		return -EFAULT;
-
-	ret = ioctl_flash_part_info_in(stdev, &info);
-
 	if (copy_to_user(uinfo, &info, sizeof(info)))
 		return -EFAULT;
 
-	return ret;
+	return 0;
 }
 
 static int ioctl_event_summary(struct switchtec_dev *stdev,

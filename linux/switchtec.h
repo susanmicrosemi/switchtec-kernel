@@ -130,11 +130,6 @@ enum {
 	SWITCHTEC_IMG1_RUNNING = 0x08,
 };
 
-struct partition_info {
-	u32 address;
-	u32 length;
-};
-
 struct sys_info_regs {
 	u32 device_id;
 	u32 device_version;
@@ -147,8 +142,8 @@ struct sys_info_regs {
 	u16 bl2_running;
 	u16 cfg_running;
 	u16 fw_running;
-	u16 reserved;
-	u32 reserved2[56];
+	u16 reserved2;
+	u32 reserved3[56];
 	char vendor_id[8];
 	char product_id[16];
 	char product_revision[4];
@@ -159,14 +154,21 @@ struct sys_info_regs {
 
 struct flash_info_regs {
 	u32 flash_part_map_upd_idx;
+
 	struct active_partition_info {
 		unsigned char active_bl2_flag;
 		unsigned char active_config_flag;
 		unsigned char active_mainfw_flag;
 		unsigned char reserved;
 	} active_flag;
+
 	u32 flash_length;
-	struct partition_info cfg0;
+
+	struct partition_info {
+                u32 address;
+                u32 length;
+        } cfg0;
+
 	struct partition_info cfg1;
 	struct partition_info img0;
 	struct partition_info img1;
