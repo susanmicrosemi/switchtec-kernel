@@ -577,39 +577,76 @@ static void set_fw_info_part(struct switchtec_ioctl_flash_part_info *info,
 }
 
 static int ioctl_flash_part_info(struct switchtec_dev *stdev,
-	struct switchtec_ioctl_flash_part_info __user *uinfo)
+				 struct switchtec_ioctl_flash_part_info __user *uinfo)
 {
 	struct switchtec_ioctl_flash_part_info info = {0};
 	struct flash_info_regs __iomem *fi = stdev->mmio_flash_info;
 	struct sys_info_regs __iomem *si = stdev->mmio_sys_info;
-	u32 active_addr = -1;
+	u32 active_bl2_flag, active_cfg_flag, active_img_flag;
+	u32 active_flag;
 
 	if (copy_from_user(&info, uinfo, sizeof(info)))
 		return -EFAULT;
 
 	switch (info.flash_partition) {
+	case SWITCHTEC_IOCTL_PART_BL2_0:
+		info.address = SWITCHTEC_BL2_0_ADDR;
+		info.length = SWITCHTEC_BL2_LEN;
+		active_flag = ioread32(&fi->active_flag);
+		active_bl2_flag = active_flag & SWITCHTEC_BL2_ACT_MASK;
+		if (active_bl2_flag == SWITCHTEC_BL2_0_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
+		if (ioread16(&si->bl2_running) == SWITCHTEC_BL2_0_RUNNING)
+			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
+		break;
+	case SWITCHTEC_IOCTL_PART_BL2_1:
+		info.address = SWITCHTEC_BL2_1_ADDR;
+		info.length = SWITCHTEC_BL2_LEN;
+		active_flag = ioread32(&fi->active_flag);
+		active_bl2_flag = active_flag & SWITCHTEC_BL2_ACT_MASK;
+		if (active_bl2_flag == SWITCHTEC_BL2_1_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
+		if (ioread16(&si->bl2_running) == SWITCHTEC_BL2_1_RUNNING)
+			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
+		break;
 	case SWITCHTEC_IOCTL_PART_CFG0:
-		active_addr = ioread32(&fi->active_cfg);
+		active_flag = ioread32(&fi->active_flag);
+		active_cfg_flag = (active_flag >> SWITCHTEC_CFG_ACTFLAG_SHIFT) &
+				  SWITCHTEC_CFG_ACTFLAG_MASK;
 		set_fw_info_part(&info, &fi->cfg0);
+		if (active_cfg_flag == SWITCHTEC_CFG0_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
 		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_CFG1:
-		active_addr = ioread32(&fi->active_cfg);
+		active_flag = ioread32(&fi->active_flag);
+		active_cfg_flag = (active_flag >> SWITCHTEC_CFG_ACTFLAG_SHIFT) &
+				  SWITCHTEC_CFG_ACTFLAG_MASK;
 		set_fw_info_part(&info, &fi->cfg1);
+		if (active_cfg_flag == SWITCHTEC_CFG1_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
 		if (ioread16(&si->cfg_running) == SWITCHTEC_CFG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG0:
-		active_addr = ioread32(&fi->active_img);
+		active_flag = ioread32(&fi->active_flag);
+		active_img_flag = (active_flag >> SWITCHTEC_IMG_ACTFLAG_SHIFT) &
+				  SWITCHTEC_IMG_ACTFLAG_MASK;
 		set_fw_info_part(&info, &fi->img0);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG0_RUNNING)
+		if (active_img_flag == SWITCHTEC_IMG0_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
+		if (ioread16(&si->fw_running) == SWITCHTEC_IMG0_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_IMG1:
-		active_addr = ioread32(&fi->active_img);
+		active_flag = ioread32(&fi->active_flag);
+		active_img_flag = (active_flag >> SWITCHTEC_IMG_ACTFLAG_SHIFT) &
+				  SWITCHTEC_IMG_ACTFLAG_MASK;
 		set_fw_info_part(&info, &fi->img1);
-		if (ioread16(&si->img_running) == SWITCHTEC_IMG1_RUNNING)
+		if (active_img_flag == SWITCHTEC_IMG1_ACTIVE)
+			info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
+		if (ioread16(&si->fw_running) == SWITCHTEC_IMG1_RUNNING)
 			info.active |= SWITCHTEC_IOCTL_PART_RUNNING;
 		break;
 	case SWITCHTEC_IOCTL_PART_NVLOG:
@@ -642,9 +679,6 @@ static int ioctl_flash_part_info(struct switchtec_dev *stdev,
 	default:
 		return -EINVAL;
 	}
-
-	if (info.address == active_addr)
-		info.active |= SWITCHTEC_IOCTL_PART_ACTIVE;
 
 	if (copy_to_user(uinfo, &info, sizeof(info)))
 		return -EFAULT;
