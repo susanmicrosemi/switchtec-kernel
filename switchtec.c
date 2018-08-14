@@ -577,7 +577,7 @@ static void set_fw_info_part(struct switchtec_ioctl_flash_part_info *info,
 }
 
 static int ioctl_flash_part_info(struct switchtec_dev *stdev,
-				    struct switchtec_ioctl_flash_part_info __user *info)
+				 struct switchtec_ioctl_flash_part_info __user *info)
 {
 	struct switchtec_ioctl_flash_part_info info = {0};
 	struct flash_info_regs __iomem *fi = stdev->mmio_flash_info;
