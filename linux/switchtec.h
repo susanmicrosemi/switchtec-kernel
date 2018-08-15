@@ -135,21 +135,31 @@ struct sys_info_regs {
 	u32 device_version;
 	u32 firmware_version;
 	u32 reserved1;
-	u32 vendor_table_revision;
-	u32 table_format_version;
+	u32 reserved2;//saratoga not define
+	u32 version_config; //new add
+	u32 version_fw;//new add
 	u32 partition_id;
-	u32 cfg_file_fmt_version;
 	u16 bl2_running;
 	u16 cfg_running;
 	u16 fw_running;
-	u16 reserved2;
-	u32 reserved3[56];
-	char vendor_id[8];
-	char product_id[16];
-	char product_revision[4];
-	char component_vendor[8];
-	u16 component_id;
-	u8 component_revision;
+	u16 reserved3;
+	u32 reserved4[54];
+	u32 vendor_seeprom_twi;//0x2100, new add;
+	u32 vendor_table_revision; //0x2104
+	u32 vendor_specific_info[2]; //0x2108
+	u16 vendor_id; //0x2110
+	u16 component_id;//p2p_device_id; //0x2112
+	u8 component_revision; //0x2114;
+	u8 reserved5;
+	u16 reserved6;
+	u32 p2p_class_id; //0x2118
+	u16 system_vendor_id; //0x211C
+	u16 subsystem_id; //0x211E
+	u32 p2p_serial_number[2]; //0x2120
+	u32 component_vendor[2]; //0x2128 manufacture_data
+	u32 product_id[6]; //0x2130
+	u16 product_revision;
+	u16 reserved7;
 } __packed;
 
 struct flash_info_regs {
