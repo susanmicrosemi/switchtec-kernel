@@ -135,21 +135,31 @@ struct sys_info_regs {
 	u32 device_version;
 	u32 firmware_version;
 	u32 reserved1;
-	u32 vendor_table_revision;
-	u32 table_format_version;
+	u32 reserved2;
+	u32 version_config;
+	u32 version_fw;
 	u32 partition_id;
-	u32 cfg_file_fmt_version;
 	u16 bl2_running;
 	u16 cfg_running;
 	u16 fw_running;
-	u16 reserved2;
-	u32 reserved3[56];
-	char vendor_id[8];
-	char product_id[16];
-	char product_revision[4];
-	char component_vendor[8];
+	u16 reserved3;
+	u32 reserved4[54];
+	u32 vendor_seeprom_twi;
+	u32 vendor_table_revision;
+	u32 vendor_specific_info[2];
+	u16 vendor_id;
 	u16 component_id;
 	u8 component_revision;
+	u8 reserved5;
+	u16 reserved6;
+	u32 p2p_class_id;
+	u16 system_vendor_id;
+	u16 subsystem_id;
+	u32 p2p_serial_number[2];
+	u32 component_vendor[2];
+	u32 product_id[6];
+	u16 product_revision;
+	u16 reserved7;
 } __packed;
 
 struct flash_info_regs {
@@ -165,9 +175,9 @@ struct flash_info_regs {
 	u32 flash_length;
 
 	struct partition_info {
-                u32 address;
-                u32 length;
-        } cfg0;
+		u32 address;
+		u32 length;
+	} cfg0;
 
 	struct partition_info cfg1;
 	struct partition_info img0;
