@@ -120,10 +120,14 @@ struct sw_event_regs {
 } __packed;
 
 enum {
-	SWITCHTEC_CFG0_RUNNING = 0x04,
-	SWITCHTEC_CFG1_RUNNING = 0x05,
-	SWITCHTEC_IMG0_RUNNING = 0x03,
-	SWITCHTEC_IMG1_RUNNING = 0x07,
+	SWITCHTEC_BL2_0_RUNNING = 0x01,
+	SWITCHTEC_BL2_1_RUNNING = 0x02,
+	SWITCHTEC_MAP1_RUNNING = 0x03,
+	SWITCHTEC_MAP0_RUNNING = 0x04,
+	SWITCHTEC_CFG0_RUNNING = 0x05,
+	SWITCHTEC_CFG1_RUNNING = 0x06,
+	SWITCHTEC_IMG0_RUNNING = 0x07,
+	SWITCHTEC_IMG1_RUNNING = 0x08,
 };
 
 struct sys_info_regs {
@@ -131,33 +135,42 @@ struct sys_info_regs {
 	u32 device_version;
 	u32 firmware_version;
 	u32 reserved1;
-	u32 vendor_table_revision;
-	u32 table_format_version;
+	u32 reserved2;
+	u32 version_config;
+	u32 version_fw;
 	u32 partition_id;
-	u32 cfg_file_fmt_version;
+	u16 bl2_running;
 	u16 cfg_running;
-	u16 img_running;
-	u32 reserved2[57];
-	char vendor_id[8];
-	char product_id[16];
-	char product_revision[4];
-	char component_vendor[8];
+	u16 fw_running;
+	u16 reserved3;
+	u32 reserved4[54];
+	u32 vendor_seeprom_twi;
+	u32 vendor_table_revision;
+	u32 vendor_specific_info[2];
+	u16 vendor_id;
 	u16 component_id;
 	u8 component_revision;
+	u8 reserved5;
+	u16 reserved6;
+	u32 p2p_class_id;
+	u16 system_vendor_id;
+	u16 subsystem_id;
+	u32 p2p_serial_number[2];
+	u32 component_vendor[2];
+	u32 product_id[6];
+	u16 product_revision;
+	u16 reserved7;
 } __packed;
 
 struct flash_info_regs {
 	u32 flash_part_map_upd_idx;
 
 	struct active_partition_info {
-		u32 address;
-		u32 build_version;
-		u32 build_string;
-	} active_img;
-
-	struct active_partition_info active_cfg;
-	struct active_partition_info inactive_img;
-	struct active_partition_info inactive_cfg;
+		unsigned char active_bl2_flag;
+		unsigned char active_config_flag;
+		unsigned char active_mainfw_flag;
+		unsigned char reserved;
+	} active_flag;
 
 	u32 flash_length;
 
